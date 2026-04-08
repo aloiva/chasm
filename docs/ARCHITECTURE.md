@@ -68,12 +68,14 @@ src/
       SessionList.svelte        — virtual scroll list
       SessionDetail.svelte      — conversation timeline
       SourceBadge.svelte        — "CLI" / "VSC" badge
+      SourceFilter.svelte       — multi-select source toggle pills
+      ContextMenu.svelte        — right-click context menu (Resume/Delete/Preview/Rename)
       SearchBar.svelte          — debounced search input
       Toolbar.svelte            — sort/filter/scan
       SourcePicker.svelte       — first-launch source selector
       ConfirmDialog.svelte      — delete confirmation
     stores/
-      sessions.ts               — Svelte store for session data
+      sessions.ts               — Svelte store for session data (multi-select, folder grouping)
       theme.ts                  — CSS custom property injector
       sources.ts                — enabled source state
     types/

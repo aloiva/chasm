@@ -33,6 +33,10 @@ pub struct SessionSummary {
     pub has_checkpoints: bool,
     /// Whether this session still exists on disk
     pub exists_on_disk: bool,
+    /// Path to the session's storage directory on disk
+    pub storage_path: Option<String>,
+    /// Session activity status ("recent" if updated within 5 minutes, null otherwise)
+    pub status: Option<String>,
     /// Source-specific metadata (extensible without changing the struct)
     pub extra: HashMap<String, String>,
 }
@@ -97,6 +101,22 @@ impl std::fmt::Display for SourceError {
 }
 
 impl std::error::Error for SourceError {}
+
+/// Compute session status based on updated_at timestamp.
+/// Returns "recent" if updated within 5 minutes, None otherwise.
+pub fn compute_status(updated_at: &Option<String>) -> Option<String> {
+    let ts = updated_at.as_deref()?;
+    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S%.f")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S"))
+        .ok()?;
+    let now = chrono::Local::now().naive_local();
+    if (now - parsed).num_minutes() < 5 {
+        Some("recent".to_string())
+    } else {
+        None
+    }
+}
 
 /// The core abstraction — every AI tool implements this trait.
 /// Maximum abstraction so new tools can be added by implementing one trait.

@@ -11,6 +11,8 @@ export interface SessionSummary {
   size_bytes: number | null;
   has_checkpoints: boolean;
   exists_on_disk: boolean;
+  storage_path: string | null;
+  status: string | null;
   extra: Record<string, string>;
 }
 

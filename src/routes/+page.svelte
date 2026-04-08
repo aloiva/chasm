@@ -1,39 +1,252 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import Toolbar from '$lib/components/Toolbar.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
   import SessionDetail from '$lib/components/SessionDetail.svelte';
+  import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { sessions, loading, selectedSessionId } from '$lib/stores/sessions';
+  import type { SessionSummary } from '$lib/types/session';
 
-  onMount(async () => {
+  let contextMenu = $state<{ session: SessionSummary; x: number; y: number } | null>(null);
+  let renameTarget = $state<SessionSummary | null>(null);
+  let renameValue = $state('');
+  let deleteConfirm = $state<SessionSummary | null>(null);
+  let unlisten: (() => void) | null = null;
+
+  // Resizable sidebar
+  let sidebarWidth = $state(400);
+  let isResizing = $state(false);
+
+  function onResizeStart(e: MouseEvent) {
+    e.preventDefault();
+    isResizing = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    function onMouseMove(ev: MouseEvent) {
+      const newWidth = startWidth + (ev.clientX - startX);
+      sidebarWidth = Math.max(200, Math.min(newWidth, window.innerWidth - 300));
+    }
+
+    function onMouseUp() {
+      isResizing = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  async function scanSessions() {
     loading.set(true);
     try {
       const result = await invoke('list_sessions');
       sessions.set(result as any[]);
     } catch (e) {
-      console.error('Initial scan failed:', e);
+      console.error('Scan failed:', e);
     } finally {
       loading.set(false);
     }
+  }
+
+  onMount(async () => {
+    await scanSessions();
+
+    // Listen for file watcher events to auto-refresh
+    unlisten = await listen('sessions-changed', () => {
+      scanSessions();
+    });
+  });
+
+  onDestroy(() => {
+    unlisten?.();
   });
 
   const showDetail = $derived($selectedSessionId !== null);
+
+  function openContextMenu(e: MouseEvent, session: SessionSummary) {
+    contextMenu = { session, x: e.clientX, y: e.clientY };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handlePreview(session: SessionSummary) {
+    selectedSessionId.set(session.id + ':' + session.source);
+  }
+
+  async function handleCopyId(session: SessionSummary) {
+    try {
+      await navigator.clipboard.writeText(session.id);
+    } catch (e: any) {
+      console.error('Copy ID failed:', e);
+    }
+  }
+
+  async function handleResume(session: SessionSummary) {
+    try {
+      await invoke('resume_session', { source: session.source, id: session.id });
+    } catch (e: any) {
+      console.error('Resume failed:', e);
+    }
+  }
+
+  async function handleOpenFiles(session: SessionSummary) {
+    if (!session.cwd) return;
+    try {
+      await invoke('open_folder', { path: session.cwd });
+    } catch (e: any) {
+      console.error('Open folder failed:', e);
+    }
+  }
+
+  function handleRenameStart(session: SessionSummary) {
+    renameTarget = session;
+    renameValue = session.title ?? '';
+  }
+
+  async function handleRenameSubmit() {
+    if (!renameTarget || !renameValue.trim()) return;
+    try {
+      await invoke('rename_session', {
+        source: renameTarget.source,
+        id: renameTarget.id,
+        name: renameValue.trim(),
+      });
+      // Update local state
+      sessions.update(all =>
+        all.map(s =>
+          s.id === renameTarget!.id && s.source === renameTarget!.source
+            ? { ...s, title: renameValue.trim() }
+            : s
+        )
+      );
+    } catch (e: any) {
+      console.error('Rename failed:', e);
+    } finally {
+      renameTarget = null;
+      renameValue = '';
+    }
+  }
+
+  function handleRenameCancel() {
+    renameTarget = null;
+    renameValue = '';
+  }
+
+  function handleDeleteStart(session: SessionSummary) {
+    deleteConfirm = session;
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteConfirm) return;
+    try {
+      const errors: string[] = await invoke('delete_sessions', {
+        source: deleteConfirm.source,
+        ids: [deleteConfirm.id],
+      });
+      if (errors.length > 0) {
+        console.error('Delete errors:', errors);
+      } else {
+        // Remove from local state
+        const deleted = deleteConfirm;
+        sessions.update(all =>
+          all.filter(s => !(s.id === deleted.id && s.source === deleted.source))
+        );
+        // Clear detail if viewing the deleted session
+        if ($selectedSessionId === deleted.id + ':' + deleted.source) {
+          selectedSessionId.set(null);
+        }
+      }
+    } catch (e: any) {
+      console.error('Delete failed:', e);
+    } finally {
+      deleteConfirm = null;
+    }
+  }
+
+  function handleDeleteCancel() {
+    deleteConfirm = null;
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') handleRenameSubmit();
+    if (e.key === 'Escape') handleRenameCancel();
+  }
 </script>
 
 <div class="app">
   <Toolbar />
-  <div class="content">
-    <div class="sidebar" class:collapsed={showDetail}>
-      <SessionList />
+  <div class="content" class:resizing={isResizing}>
+    <div class="sidebar" class:collapsed={showDetail} style={showDetail ? `width:${sidebarWidth}px;min-width:${sidebarWidth}px` : ''}>
+      <SessionList oncontextmenu={openContextMenu} />
     </div>
     {#if showDetail}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="resize-handle" onmousedown={onResizeStart}></div>
       <div class="detail-panel">
         <SessionDetail />
       </div>
     {/if}
   </div>
 </div>
+
+{#if contextMenu}
+  <ContextMenu
+    session={contextMenu.session}
+    x={contextMenu.x}
+    y={contextMenu.y}
+    onclose={closeContextMenu}
+    onpreview={handlePreview}
+    oncopyid={handleCopyId}
+    onopenfiles={handleOpenFiles}
+    onresume={handleResume}
+    onrename={handleRenameStart}
+    ondelete={handleDeleteStart}
+  />
+{/if}
+
+{#if renameTarget}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={handleRenameCancel}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
+      <div class="modal-title">Rename Session</div>
+      <input
+        class="modal-input"
+        type="text"
+        bind:value={renameValue}
+        onkeydown={handleRenameKeydown}
+        placeholder="Session name"
+      />
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick={handleRenameCancel}>Cancel</button>
+        <button class="modal-btn confirm" onclick={handleRenameSubmit} disabled={!renameValue.trim()}>Rename</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if deleteConfirm}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={handleDeleteCancel}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
+      <div class="modal-title">Delete Session</div>
+      <div class="modal-text">
+        This will permanently delete the session folder from disk. This action cannot be undone.
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick={handleDeleteCancel}>Cancel</button>
+        <button class="modal-btn danger" onclick={handleDeleteConfirm}>Delete</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :root {
@@ -70,6 +283,24 @@
 
   :global(*) { box-sizing: border-box; }
 
+  :global(*::-webkit-scrollbar) {
+    width: 8px;
+    height: 8px;
+  }
+  :global(*::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+  :global(*::-webkit-scrollbar-thumb) {
+    background: var(--border);
+    border-radius: 4px;
+  }
+  :global(*::-webkit-scrollbar-thumb:hover) {
+    background: var(--text-muted);
+  }
+  :global(*::-webkit-scrollbar-corner) {
+    background: transparent;
+  }
+
   .app {
     display: flex;
     flex-direction: column;
@@ -92,9 +323,24 @@
   }
 
   .sidebar.collapsed {
-    width: 400px;
-    min-width: 400px;
     flex-shrink: 0;
+  }
+
+  .resize-handle {
+    width: 4px;
+    cursor: col-resize;
+    background: var(--border);
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .resize-handle:hover,
+  .resizing .resize-handle {
+    background: var(--accent);
+  }
+
+  .content.resizing {
+    user-select: none;
+    cursor: col-resize;
   }
 
   .detail-panel {
@@ -103,4 +349,89 @@
     display: flex;
     flex-direction: column;
   }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    min-width: 340px;
+    max-width: 420px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-title {
+    font-size: var(--font-size-title);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  .modal-text {
+    font-size: var(--font-size-base);
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .modal-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
+    margin-bottom: 16px;
+    outline: none;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .modal-btn {
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .modal-btn.cancel {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+  }
+  .modal-btn.cancel:hover { color: var(--text-primary); }
+  .modal-btn.confirm {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+  }
+  .modal-btn.confirm:hover { opacity: 0.9; }
+  .modal-btn.confirm:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .modal-btn.danger {
+    background: var(--accent-red);
+    color: #fff;
+    border-color: var(--accent-red);
+  }
+  .modal-btn.danger:hover { opacity: 0.9; }
 </style>

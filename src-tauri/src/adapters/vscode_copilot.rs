@@ -8,19 +8,18 @@ use std::path::{Path, PathBuf};
 /// Source adapter for VS Code Copilot Chat sessions.
 ///
 /// Data lives in VS Code's workspace storage:
-/// - %APPDATA%/Code/User/workspaceStorage/{hash}/state.vscdb (SQLite)
-/// - Key: chat.ChatSessionStore.index → session index JSON
-/// - Key: memento/interactive-session → user prompt history
-/// - %APPDATA%/Code/User/workspaceStorage/{hash}/workspace.json → folder mapping
+/// - Windows: %APPDATA%/Code/User/workspaceStorage/
+/// - macOS:   ~/Library/Application Support/Code/User/workspaceStorage/
+/// - Linux:   ~/.config/Code/User/workspaceStorage/
 pub struct VsCodeCopilotSource {
     workspace_storage_dir: PathBuf,
 }
 
 impl VsCodeCopilotSource {
     pub fn new() -> Self {
-        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        let base = dirs::config_dir().unwrap_or_default();
         Self {
-            workspace_storage_dir: PathBuf::from(appdata)
+            workspace_storage_dir: base
                 .join("Code")
                 .join("User")
                 .join("workspaceStorage"),
@@ -121,13 +120,19 @@ struct VsCodeSession {
     is_empty: bool,
 }
 
-/// Decode VS Code folder URI to a Windows path.
+/// Decode VS Code folder URI to a native path.
 fn decode_vscode_folder_uri(uri: &str) -> Option<String> {
     let path = uri.strip_prefix("file:///")?;
-    // URL decode: %3A → :, %20 → space, etc.
     let decoded = urlish_decode(path);
-    // Convert forward slashes to backslashes for Windows
-    Some(decoded.replace('/', "\\"))
+    #[cfg(windows)]
+    {
+        Some(decoded.replace('/', "\\"))
+    }
+    #[cfg(not(windows))]
+    {
+        // On Unix, file URIs use file:///path so the path starts after the third slash
+        Some(format!("/{}", decoded))
+    }
 }
 
 /// Simple URL decoding (handles %XX sequences).
@@ -222,11 +227,13 @@ impl SessionSource for VsCodeCopilotSource {
                     cwd: folder.clone(),
                     branch: None,
                     created_at: session.last_message_date.clone(),
-                    updated_at: session.last_message_date,
+                    updated_at: session.last_message_date.clone(),
                     first_message: None, // Would need deeper DB parsing
                     size_bytes: None,
                     has_checkpoints: false,
                     exists_on_disk: true,
+                    storage_path: Some(db_path.parent().unwrap_or(db_path.as_path()).to_string_lossy().into_owned()),
+                    status: super::compute_status(&session.last_message_date),
                     extra,
                 });
             }

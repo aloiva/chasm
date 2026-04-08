@@ -93,3 +93,23 @@ The watcher uses OS-native APIs (`ReadDirectoryChangesW` on Windows via the `not
 **Decision**: Svelte for minimal bundle size and fast startup.
 
 Svelte compiles to vanilla JS at build time — no runtime library shipped. This keeps the WebView2 payload minimal, contributing to the <500ms startup target.
+
+## 11. Multi-select source filter over single-select dropdown
+
+**Decision**: Replace the single-select `<select>` dropdown with toggle-pill buttons.
+
+A dropdown with "All / CLI / VS Code" is awkward when adding future sources — selecting multiple sources isn't possible. Toggle pills let the user click any combination (e.g., just CLI, CLI + future source). When nothing is selected, all sources show — no explicit "All" option needed.
+
+The source list is now populated dynamically via the `get_available_sources` Tauri command, so adding a new adapter automatically adds a new pill with no frontend changes.
+
+## 12. Folder-based grouping and sort
+
+**Decision**: Add "Folders" as a sort option that sorts sessions alphabetically by `cwd` and groups by directory path instead of source.
+
+Users often want to see all sessions for a specific project folder together, regardless of which tool created them. When sortBy is `folder`, `groupBy` automatically switches to `folder` mode, and the `groupedSessions` derived store groups by cwd path. Sessions with no known cwd are grouped under "(no folder)".
+
+## 13. Resume navigates to session's working directory first
+
+**Decision**: `copilot -i 'resume {id}'` is preceded by `cd '<cwd>'` in the spawned terminal.
+
+Without this, the resumed session opens in the app's own directory — not the project the user was working on. The cwd is looked up from workspace.yaml first (latest state), falling back to the session-store.db `sessions.cwd` column.

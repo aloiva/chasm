@@ -43,6 +43,24 @@
     }
   }
 
+  async function openFiles() {
+    if (!detail?.summary.cwd) return;
+    try {
+      await invoke('open_folder', { path: detail.summary.cwd });
+    } catch (e: any) {
+      console.error('Open folder failed:', e);
+    }
+  }
+
+  async function openSessionFolder() {
+    if (!detail?.summary.storage_path) return;
+    try {
+      await invoke('open_folder', { path: detail.summary.storage_path });
+    } catch (e: any) {
+      console.error('Open session folder failed:', e);
+    }
+  }
+
   function goBack() {
     selectedSessionId.set(null);
   }
@@ -64,11 +82,19 @@
       <div class="header-info">
         <div class="header-title">
           <SourceBadge source={detail.summary.source} size="md" />
-          <span>{detail.summary.title ?? '(unnamed)'}</span>
+          <span class="title-text">{detail.summary.title ?? '(unnamed)'}</span>
         </div>
         <div class="header-meta">
+          <span
+            class="session-id"
+            title="Click to copy: {detail.summary.id}"
+            onclick={() => navigator.clipboard.writeText(detail.summary.id)}
+            role="button"
+            tabindex="0"
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') navigator.clipboard.writeText(detail.summary.id); }}
+          >🔑 {detail.summary.id.length > 24 ? detail.summary.id.slice(0, 24) + '…' : detail.summary.id}</span>
           {#if detail.summary.cwd}
-            <span>📁 {detail.summary.cwd}</span>
+            <span class="meta-item" title={detail.summary.cwd}>📁 {detail.summary.cwd}</span>
           {/if}
           {#if detail.summary.branch}
             <span>🌿 {detail.summary.branch}</span>
@@ -83,7 +109,15 @@
           <div class="files-badge">{detail.files_touched.length} files touched</div>
         {/if}
       </div>
-      <button class="resume-btn" onclick={resumeSession}>▶ Resume</button>
+      <div class="header-actions">
+        <button class="resume-btn" onclick={resumeSession}>▶ Resume</button>
+        {#if detail.summary.cwd}
+          <button class="open-files-btn" onclick={openFiles}>📂 Open Folder</button>
+        {/if}
+        {#if detail.summary.storage_path}
+          <button class="open-files-btn" onclick={openSessionFolder}>🗂 Session Folder</button>
+        {/if}
+      </div>
     </div>
 
     <div class="timeline">
@@ -136,13 +170,15 @@
   }
   .error { color: var(--accent-red); }
 
-  .detail { display: flex; flex-direction: column; height: 100%; }
+  .detail { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
   .header {
-    display: flex; align-items: flex-start; gap: 12px;
+    display: flex; align-items: flex-start; gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
+    flex-shrink: 0;
+    overflow: hidden;
   }
   .back-btn {
     padding: 4px 10px; border-radius: var(--radius);
@@ -151,30 +187,55 @@
     font-size: var(--font-size-small); flex-shrink: 0;
   }
   .back-btn:hover { border-color: var(--accent); color: var(--text-primary); }
-  .header-info { flex: 1; min-width: 0; }
+  .header-info { flex: 1; min-width: 0; overflow: hidden; }
   .header-title {
     display: flex; align-items: center; gap: 8px;
     font-size: var(--font-size-title); font-weight: 600; color: var(--text-primary);
   }
+  .title-text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .header-meta {
-    display: flex; flex-wrap: wrap; gap: 12px;
+    display: flex; flex-wrap: wrap; gap: 8px 12px;
     font-size: var(--font-size-small); color: var(--text-muted);
     margin-top: 6px; font-family: var(--font-ui);
   }
+  .meta-item {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 220px;
+  }
+  .session-id {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    transition: color 0.15s;
+  }
+  .session-id:hover { color: var(--accent); }
   .files-badge {
     font-size: 10px; color: var(--accent-yellow);
     margin-top: 4px;
   }
+  .header-actions {
+    display: flex; flex-direction: column; gap: 4px;
+    flex-shrink: 0;
+  }
   .resume-btn {
     padding: 6px 14px; border-radius: var(--radius);
-    border: 1px solid #238636; background: #238636;
+    border: 1px solid var(--accent-green); background: var(--accent-green);
     color: #fff; cursor: pointer; font-family: var(--font-mono);
     font-size: var(--font-size-small); font-weight: 600; flex-shrink: 0;
   }
-  .resume-btn:hover { background: #2ea043; }
+  .resume-btn:hover { opacity: 0.9; }
+  .open-files-btn {
+    padding: 6px 14px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono);
+    font-size: var(--font-size-small); flex-shrink: 0;
+  }
+  .open-files-btn:hover { border-color: var(--accent); color: var(--text-primary); }
 
   .timeline {
-    flex: 1; overflow-y: auto; padding: 12px 16px;
+    flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px;
   }
 
   .turn { margin-bottom: 16px; }

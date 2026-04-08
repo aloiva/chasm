@@ -1,7 +1,21 @@
 <script lang="ts">
-  import { searchQuery, selectedSource, sortBy, loading } from '$lib/stores/sessions';
+  import { searchQuery, sortBy, loading } from '$lib/stores/sessions';
   import { invoke } from '@tauri-apps/api/core';
   import { sessions, sources } from '$lib/stores/sessions';
+  import SourceFilter from './SourceFilter.svelte';
+  import ViewSelector from './ViewSelector.svelte';
+  import FilterPanel from './FilterPanel.svelte';
+  import type { SourceInfo } from '$lib/types/session';
+  import { onMount } from 'svelte';
+
+  onMount(async () => {
+    try {
+      const result = await invoke('get_available_sources') as SourceInfo[];
+      sources.set(result);
+    } catch (e) {
+      console.error('Failed to fetch sources:', e);
+    }
+  });
 
   async function scan() {
     loading.set(true);
@@ -17,23 +31,28 @@
 </script>
 
 <div class="toolbar">
-  <input
-    type="text"
-    class="search"
-    placeholder="Search sessions..."
-    bind:value={$searchQuery}
-  />
-  <select class="select" bind:value={$selectedSource}>
-    <option value="all">All Sources</option>
-    <option value="copilot-cli">Copilot CLI</option>
-    <option value="vscode-copilot">VS Code</option>
-  </select>
+  <div class="search-wrap">
+    <input
+      type="text"
+      class="search"
+      placeholder="Search sessions..."
+      bind:value={$searchQuery}
+    />
+    {#if $searchQuery}
+      <button class="search-clear" onclick={() => searchQuery.set('')} aria-label="Clear search">×</button>
+    {/if}
+  </div>
+  <SourceFilter sources={$sources} />
+  <ViewSelector />
   <select class="select" bind:value={$sortBy}>
-    <option value="updated">Last Modified</option>
-    <option value="created">Created</option>
-    <option value="turns">Turn Count</option>
-    <option value="size">Size</option>
+    <option value="updated">Sort: Modified</option>
+    <option value="created">Sort: Created</option>
+    <option value="turns">Sort: Turns</option>
+    <option value="size">Sort: Size</option>
+    <option value="title">Sort: Title (A-Z)</option>
+    <option value="branch">Sort: Branch</option>
   </select>
+  <FilterPanel />
   <button class="scan-btn" onclick={scan} disabled={$loading}>
     {$loading ? '...' : '⟳ Scan'}
   </button>
@@ -48,11 +67,17 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
   }
-  .search {
+  .search-wrap {
     flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .search {
+    width: 100%;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 6px 12px;
+    padding: 6px 28px 6px 12px;
     font-size: var(--font-size-base);
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -61,6 +86,18 @@
   }
   .search:focus { border-color: var(--accent); }
   .search::placeholder { color: var(--text-muted); }
+  .search-clear {
+    position: absolute;
+    right: 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .search-clear:hover { color: var(--text-primary); }
   .select {
     padding: 5px 8px;
     border-radius: var(--radius);
@@ -74,14 +111,14 @@
   .scan-btn {
     padding: 5px 12px;
     border-radius: var(--radius);
-    border: 1px solid #238636;
-    background: #238636;
+    border: 1px solid var(--accent-green);
+    background: var(--accent-green);
     color: #fff;
     font-size: var(--font-size-small);
     font-family: var(--font-mono);
     cursor: pointer;
     font-weight: 600;
   }
-  .scan-btn:hover { background: #2ea043; }
+  .scan-btn:hover { opacity: 0.9; }
   .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

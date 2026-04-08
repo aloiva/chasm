@@ -1,20 +1,29 @@
 <script lang="ts">
+  import type { SessionSummary } from '$lib/types/session';
   import SessionCard from './SessionCard.svelte';
-  import { groupedSessions, filteredSessions } from '$lib/stores/sessions';
+  import { groupedSessions, filteredSessions, viewMode, sources } from '$lib/stores/sessions';
 
-  const sourceNames: Record<string, string> = {
-    'copilot-cli': 'COPILOT CLI',
-    'vscode-copilot': 'VS CODE COPILOT',
-  };
+  let { oncontextmenu }: {
+    oncontextmenu?: (e: MouseEvent, session: SessionSummary) => void;
+  } = $props();
+
+  function resolveHeader(key: string): string {
+    if ($viewMode === 'folder' || $viewMode === 'branch' || $viewMode === 'date') {
+      return key;
+    }
+    // Resolve source name from sources store
+    const info = $sources.find(s => s.name === key);
+    return info?.display_name?.toUpperCase() ?? key.toUpperCase();
+  }
 </script>
 
 <div class="list">
-  {#each Object.entries($groupedSessions) as [source, sessions]}
+  {#each Object.entries($groupedSessions) as [key, sessions]}
     <div class="source-header">
-      {sourceNames[source] ?? source.toUpperCase()} · {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+      {resolveHeader(key)} · {sessions.length} session{sessions.length !== 1 ? 's' : ''}
     </div>
     {#each sessions as session (session.id)}
-      <SessionCard {session} />
+      <SessionCard {session} {oncontextmenu} />
     {/each}
   {/each}
 

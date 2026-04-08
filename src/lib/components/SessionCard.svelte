@@ -4,12 +4,20 @@
   import { formatDate, formatDateRange, truncate } from '$lib/utils/format';
   import { selectedSessionId } from '$lib/stores/sessions';
 
-  let { session }: { session: SessionSummary } = $props();
+  let { session, oncontextmenu }: {
+    session: SessionSummary;
+    oncontextmenu?: (e: MouseEvent, session: SessionSummary) => void;
+  } = $props();
 
   const isActive = $derived($selectedSessionId === session.id);
   const displayTitle = $derived(
     session.title ?? truncate(session.first_message, 60) ?? '(unnamed session)'
   );
+
+  function handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    oncontextmenu?.(e, session);
+  }
 </script>
 
 <button
@@ -17,10 +25,16 @@
   class:active={isActive}
   class:deleted={!session.exists_on_disk}
   onclick={() => selectedSessionId.set(session.id + ':' + session.source)}
+  oncontextmenu={handleContextMenu}
 >
   <SourceBadge source={session.source} />
   <div class="body">
-    <div class="title">{displayTitle}</div>
+    <div class="title">
+      {#if session.status === 'recent'}
+        <span class="status-dot" title="Recently active"></span>
+      {/if}
+      {displayTitle}
+    </div>
     <div class="meta">
       {#if session.cwd}
         <span class="cwd">{session.cwd}</span>
@@ -76,6 +90,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    flex-shrink: 0;
+    box-shadow: 0 0 4px var(--accent-green);
   }
   .meta {
     font-size: var(--font-size-small);

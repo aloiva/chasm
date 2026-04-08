@@ -4,7 +4,7 @@ use super::{
 };
 use rusqlite::Connection;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Source adapter for GitHub Copilot CLI sessions.
 ///
@@ -91,6 +91,27 @@ impl CopilotCliSource {
                 .map(|mut entries| entries.next().is_some())
                 .unwrap_or(false)
     }
+
+    /// Look up session cwd from workspace.yaml first, then DB.
+    fn get_session_cwd(&self, session_id: &str) -> Option<String> {
+        // Try workspace.yaml first (may have more recent data)
+        if let Some((_, cwd)) = self.read_workspace_yaml(session_id) {
+            if cwd.is_some() {
+                return cwd;
+            }
+        }
+        // Fall back to DB
+        if let Ok(conn) = self.open_db() {
+            let mut stmt = conn
+                .prepare("SELECT cwd FROM sessions WHERE id = ?1")
+                .ok()?;
+            stmt.query_row([session_id], |row| row.get::<_, Option<String>>(0))
+                .ok()
+                .flatten()
+        } else {
+            None
+        }
+    }
 }
 
 impl SessionSource for CopilotCliSource {
@@ -160,11 +181,13 @@ impl SessionSource for CopilotCliSource {
                         cwd: effective_cwd,
                         branch,
                         created_at,
-                        updated_at,
+                        updated_at: updated_at.clone(),
                         first_message: first_msg,
                         size_bytes: self.session_size(&id),
                         has_checkpoints: self.has_checkpoints(&id),
                         exists_on_disk: exists,
+                        storage_path: Some(self.session_state_dir().join(&id).to_string_lossy().into_owned()),
+                        status: super::compute_status(&updated_at),
                         extra: HashMap::new(),
                     });
                 }
@@ -261,6 +284,8 @@ impl SessionSource for CopilotCliSource {
                 size_bytes: None,
                 has_checkpoints: !checkpoints.is_empty(),
                 exists_on_disk: true,
+                storage_path: Some(self.session_state_dir().join(id).to_string_lossy().into_owned()),
+                status: None,
                 extra: HashMap::new(),
             });
 
@@ -319,14 +344,31 @@ impl SessionSource for CopilotCliSource {
     }
 
     fn resume(&self, id: &str) -> Result<ResumeAction, SourceError> {
-        Ok(ResumeAction::SpawnTerminal {
-            command: "pwsh".to_string(),
-            args: vec![
-                "-NoExit".to_string(),
-                "-Command".to_string(),
-                format!("copilot resume {}", id),
-            ],
-        })
+        let cwd = self.get_session_cwd(id);
+        let resume_cmd = match cwd {
+            Some(dir) => format!("cd '{}'; copilot -i 'resume {}'", dir, id),
+            None => format!("copilot -i 'resume {}'", id),
+        };
+
+        #[cfg(windows)]
+        {
+            Ok(ResumeAction::SpawnTerminal {
+                command: "pwsh".to_string(),
+                args: vec![
+                    "-NoExit".to_string(),
+                    "-Command".to_string(),
+                    resume_cmd,
+                ],
+            })
+        }
+        #[cfg(not(windows))]
+        {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
+            Ok(ResumeAction::SpawnTerminal {
+                command: shell,
+                args: vec!["-c".to_string(), resume_cmd],
+            })
+        }
     }
 
     fn watch_paths(&self) -> Vec<PathBuf> {
