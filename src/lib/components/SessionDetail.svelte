@@ -1,0 +1,213 @@
+<script lang="ts">
+  import type { SessionDetail } from '$lib/types/session';
+  import SourceBadge from './SourceBadge.svelte';
+  import { formatDate, formatDateRange } from '$lib/utils/format';
+  import { invoke } from '@tauri-apps/api/core';
+  import { selectedSessionId } from '$lib/stores/sessions';
+
+  let detail = $state<SessionDetail | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+
+  // React to selection changes
+  $effect(() => {
+    const sel = $selectedSessionId;
+    if (!sel) { detail = null; return; }
+    const [id, source] = sel.split(':');
+    if (id && source) loadDetail(source, id);
+  });
+
+  async function loadDetail(source: string, id: string) {
+    loading = true;
+    error = null;
+    try {
+      detail = await invoke('get_session_detail', { source, id }) as SessionDetail;
+    } catch (e: any) {
+      error = e?.toString() ?? 'Failed to load session';
+      detail = null;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function resumeSession() {
+    if (!detail) return;
+    try {
+      const action = await invoke('resume_session', {
+        source: detail.summary.source,
+        id: detail.summary.id,
+      });
+      // Tauri will spawn the process
+    } catch (e: any) {
+      console.error('Resume failed:', e);
+    }
+  }
+
+  function goBack() {
+    selectedSessionId.set(null);
+  }
+</script>
+
+{#if !$selectedSessionId}
+  <div class="empty-detail">
+    <div class="empty-icon">📋</div>
+    <div class="empty-text">Select a session to view its conversation</div>
+  </div>
+{:else if loading}
+  <div class="loading">Loading…</div>
+{:else if error}
+  <div class="error">{error}</div>
+{:else if detail}
+  <div class="detail">
+    <div class="header">
+      <button class="back-btn" onclick={goBack}>← Back</button>
+      <div class="header-info">
+        <div class="header-title">
+          <SourceBadge source={detail.summary.source} size="md" />
+          <span>{detail.summary.title ?? '(unnamed)'}</span>
+        </div>
+        <div class="header-meta">
+          {#if detail.summary.cwd}
+            <span>📁 {detail.summary.cwd}</span>
+          {/if}
+          {#if detail.summary.branch}
+            <span>🌿 {detail.summary.branch}</span>
+          {/if}
+          <span>💬 {detail.turns.length} turns</span>
+          {#if detail.checkpoints.length > 0}
+            <span>📌 {detail.checkpoints.length} checkpoints</span>
+          {/if}
+          <span>📅 {formatDateRange(detail.summary.created_at, detail.summary.updated_at)}</span>
+        </div>
+        {#if detail.files_touched.length > 0}
+          <div class="files-badge">{detail.files_touched.length} files touched</div>
+        {/if}
+      </div>
+      <button class="resume-btn" onclick={resumeSession}>▶ Resume</button>
+    </div>
+
+    <div class="timeline">
+      {#each detail.turns as turn}
+        <!-- Check if a checkpoint should appear before this turn -->
+        {#each detail.checkpoints.filter(c => c.after_turn === turn.turn_index) as ckpt}
+          <div class="checkpoint-divider">
+            ── checkpoint {ckpt.number}: {ckpt.title ?? 'untitled'} ──
+          </div>
+        {/each}
+
+        {#if turn.user_message}
+          <div class="turn user-turn">
+            <div class="turn-label">
+              You <span class="turn-meta">turn {turn.turn_index}{turn.timestamp ? ` · ${formatDate(turn.timestamp)}` : ''}</span>
+            </div>
+            <div class="turn-content">{turn.user_message}</div>
+          </div>
+        {/if}
+
+        {#if turn.assistant_response}
+          <div class="turn assistant-turn">
+            <div class="turn-label">Copilot</div>
+            <div class="turn-content assistant-content">{turn.assistant_response}</div>
+          </div>
+        {/if}
+      {/each}
+
+      {#if detail.turns.length === 0}
+        <div class="empty-turns">No conversation data available</div>
+      {/if}
+    </div>
+  </div>
+{/if}
+
+<style>
+  .empty-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
+  .empty-text { font-size: var(--font-size-base); }
+  .loading, .error {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-muted);
+  }
+  .error { color: var(--accent-red); }
+
+  .detail { display: flex; flex-direction: column; height: 100%; }
+
+  .header {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+  .back-btn {
+    padding: 4px 10px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono);
+    font-size: var(--font-size-small); flex-shrink: 0;
+  }
+  .back-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+  .header-info { flex: 1; min-width: 0; }
+  .header-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--font-size-title); font-weight: 600; color: var(--text-primary);
+  }
+  .header-meta {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    font-size: var(--font-size-small); color: var(--text-muted);
+    margin-top: 6px; font-family: var(--font-ui);
+  }
+  .files-badge {
+    font-size: 10px; color: var(--accent-yellow);
+    margin-top: 4px;
+  }
+  .resume-btn {
+    padding: 6px 14px; border-radius: var(--radius);
+    border: 1px solid #238636; background: #238636;
+    color: #fff; cursor: pointer; font-family: var(--font-mono);
+    font-size: var(--font-size-small); font-weight: 600; flex-shrink: 0;
+  }
+  .resume-btn:hover { background: #2ea043; }
+
+  .timeline {
+    flex: 1; overflow-y: auto; padding: 12px 16px;
+  }
+
+  .turn { margin-bottom: 16px; }
+  .turn-label {
+    font-size: var(--font-size-small); font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .user-turn .turn-label { color: var(--accent); }
+  .assistant-turn .turn-label { color: var(--accent-green); }
+  .turn-meta { font-weight: 400; color: var(--text-muted); margin-left: 8px; }
+
+  .turn-content {
+    font-size: var(--font-size-base); color: var(--text-primary);
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    padding: 8px 12px; border-radius: var(--radius);
+    border-left: 2px solid var(--border);
+    background: var(--bg-secondary);
+  }
+  .assistant-content {
+    max-height: 300px; overflow-y: auto;
+    color: var(--text-secondary);
+  }
+
+  .checkpoint-divider {
+    text-align: center; color: var(--accent-yellow);
+    font-size: var(--font-size-small); font-family: var(--font-mono);
+    padding: 8px 0; margin: 12px 0;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .empty-turns {
+    text-align: center; color: var(--text-muted);
+    padding: 40px; font-size: var(--font-size-base);
+  }
+</style>
