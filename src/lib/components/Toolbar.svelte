@@ -2,7 +2,6 @@
   import { searchQuery, sortBy } from '$lib/stores/sessions';
   import { invoke } from '@tauri-apps/api/core';
   import { sources } from '$lib/stores/sessions';
-  import SourceFilter from './SourceFilter.svelte';
   import ViewSelector from './ViewSelector.svelte';
   import FilterPanel from './FilterPanel.svelte';
   import CustomSetupSelector from './CustomSetupSelector.svelte';
@@ -32,7 +31,6 @@
       <button class="search-clear" onclick={() => searchQuery.set('')} aria-label="Clear search">×</button>
     {/if}
   </div>
-  <SourceFilter sources={$sources} />
   <ViewSelector />
   <select class="select" bind:value={$sortBy}>
     <option value="updated">Sort: Modified</option>

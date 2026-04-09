@@ -20,8 +20,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 | Button | What it does |
 |--------|-------------|
 | **Search** | Filter sessions by text (matches title, summary, branch, folder) |
-| **Source** | Toggle which sources are visible (Copilot CLI, VS Code) |
-| **View** | Switch grouping: Flat, Folder, Branch, Date |
+| **View** | Switch grouping: Source, Folder, Branch, Date |
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
 | **Setups** | Save/load filter + view combinations as named presets |
@@ -62,10 +61,12 @@ Setups save your current view, sort, and filter configuration as a reusable pres
 
 ### Use cases
 
-| Setup name | View | Filters | When to use |
-|-----------|------|---------|-------------|
+| Setup name | View | Filters / Group Filter | When to use |
+|-----------|------|------------------------|-------------|
+| `Copilot CLI Sessions` | Source | group filter: `Copilot CLI` | Show only Copilot CLI sessions (built-in) |
+| `VS Code Chat Sessions` | Source | group filter: `VS Code Copilot` | Show only VS Code Chat sessions (built-in) |
 | `my-project` | Branch | folder: `C:\code\my-project` | Focus on one repo, grouped by branch |
-| `active-work` | Flat | branch: `main,dev`; min turns: 3 | Find meaningful sessions on key branches |
+| `active-work` | Source | branch: `main,dev`; min turns: 3 | Find meaningful sessions on key branches |
 | `recent-long` | Date | min turns: 10; date: last 7 days | Review substantial recent sessions |
 | `dobby` | Folder | *(built-in, auto-configured)* | When Dobby is enabled in settings, this setup appears automatically |
 

@@ -5,7 +5,6 @@ export const sessions = writable<SessionSummary[]>([]);
 export const sources = writable<SourceInfo[]>([]);
 export const loading = writable(false);
 export const searchQuery = writable('');
-export const selectedSources = writable<Set<string>>(new Set());
 export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source'>('updated');
 export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
 export const selectedSessionId = writable<string | null>(null);
@@ -112,14 +111,9 @@ export const activeFilterCount = derived(filters, ($f) => {
 });
 
 export const filteredSessions = derived(
-  [sessions, searchQuery, selectedSources, sortBy, filters, pinnedSessions],
-  ([$sessions, $query, $sources, $sort, $filters, $pinned]) => {
+  [sessions, searchQuery, sortBy, filters, pinnedSessions],
+  ([$sessions, $query, $sort, $filters, $pinned]) => {
     let result = $sessions;
-
-    // Filter by selected sources (empty set = show all)
-    if ($sources.size > 0) {
-      result = result.filter(s => $sources.has(s.source));
-    }
 
     // Filter by search query — comma-separated terms, OR logic
     if ($query.trim()) {

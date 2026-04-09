@@ -56,8 +56,9 @@ Right-click any session card to access:
 
 ### source filter
 
-- Toggle which sources are visible (e.g. show only Copilot CLI sessions)
-- Filter pills in the toolbar for quick toggling
+- Source is a **view mode** — select "Source" in the View dropdown to see sessions grouped by their origin (Copilot CLI, VS Code Copilot, etc.)
+- Use the **group filter** to narrow down to a specific source (e.g. type `Copilot CLI` to show only that group)
+- Built-in setups "Copilot CLI Sessions" and "VS Code Chat Sessions" apply this automatically
 
 ### group filter
 
@@ -69,7 +70,8 @@ Right-click any session card to access:
 
 ### grouping
 
-- Sessions can be grouped by **source**, **folder**, **branch**, or **date**
+- Sessions can be grouped by **source** (default), **folder**, **branch**, or **date**
+- Source view is the default — shows sessions grouped by their adapter origin
 - Each group has a collapsible header with session count
 - Group headers have their own context menu with bulk actions
 
@@ -122,8 +124,10 @@ Access settings via the ⚙️ gear icon in the toolbar:
 
 ## custom setups
 
-- Save the current view configuration (view mode, group filter, sort, sources, filters) as a named setup
-- Built-in **Dobby** setup: switches to folder view filtered to `C:\dobby\agents` — users can edit the filter to match their own Dobby installation
+- Save the current view configuration (view mode, group filter, sort, filters) as a named setup
+- Built-in **Copilot CLI Sessions** setup: switches to source view filtered to Copilot CLI
+- Built-in **VS Code Chat Sessions** setup: switches to source view filtered to VS Code Copilot
+- Built-in **Dobby** setup: switches to folder view filtered to `C:\dobby\agents` (visible when Dobby is enabled in settings)
 - Apply any setup with one click to restore the full view state
 - Delete user-created setups from the setup menu
 - Active setup is visually highlighted

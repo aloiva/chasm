@@ -2,7 +2,6 @@ import { writable, get } from 'svelte/store';
 import {
   viewMode,
   sortBy,
-  selectedSources,
   groupFilter,
   collapsedGroups,
   filters,
@@ -16,7 +15,6 @@ export interface CustomSetupConfig {
   viewMode: 'source' | 'folder' | 'branch' | 'date';
   groupFilter: string;
   collapseAll: boolean;
-  selectedSources: string[];
   sortBy: 'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source';
   filters: FilterState;
 }
@@ -32,6 +30,30 @@ const STORAGE_KEY = 'chasm-custom-setups';
 
 const builtInSetups: CustomSetup[] = [
   {
+    id: 'copilot-cli-sessions',
+    name: 'Copilot CLI Sessions',
+    builtIn: true,
+    config: {
+      viewMode: 'source',
+      groupFilter: 'Copilot CLI',
+      collapseAll: false,
+      sortBy: 'updated',
+      filters: { ...defaultFilters },
+    },
+  },
+  {
+    id: 'vscode-chat-sessions',
+    name: 'VS Code Chat Sessions',
+    builtIn: true,
+    config: {
+      viewMode: 'source',
+      groupFilter: 'VS Code Copilot',
+      collapseAll: false,
+      sortBy: 'updated',
+      filters: { ...defaultFilters },
+    },
+  },
+  {
     id: 'dobby',
     name: 'Dobby',
     builtIn: true,
@@ -39,7 +61,6 @@ const builtInSetups: CustomSetup[] = [
       viewMode: 'folder',
       groupFilter: 'C:\\dobby\\agents',
       collapseAll: true,
-      selectedSources: ['copilot-cli'],
       sortBy: 'updated',
       filters: { ...defaultFilters },
     },
@@ -77,7 +98,6 @@ export function applySetup(setup: CustomSetup) {
   // Now set the rest (after subscriber has fired)
   groupFilter.set(config.groupFilter);
   sortBy.set(config.sortBy);
-  selectedSources.set(new Set(config.selectedSources));
   filters.set({ ...config.filters });
 
   if (config.collapseAll) {
@@ -105,7 +125,6 @@ export function saveCurrentAsSetup(name: string): CustomSetup {
       viewMode: get(viewMode),
       groupFilter: get(groupFilter),
       collapseAll,
-      selectedSources: Array.from(get(selectedSources)),
       sortBy: get(sortBy),
       filters: { ...get(filters) },
     },
@@ -146,7 +165,6 @@ export function clearActiveSetup() {
   activeSetupId.set(null);
   viewMode.set('source');
   sortBy.set('updated');
-  selectedSources.set(new Set());
   searchQuery.set('');
   groupFilter.set('');
   collapsedGroups.set(new Set());
