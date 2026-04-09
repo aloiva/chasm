@@ -22,8 +22,8 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 | **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`. Use `,` for OR, `+` for AND |
 | **View** | Switch grouping: Source, Folder, Branch, Date |
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
-| **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
-| **Setups** | Save/load the full config (view, sort, filters, session search, group search) as named presets |
+| **Filters** | Advanced filtering — title, folder, branch, turn count, checkpoints, status, date range. Filters support the same operators as search |
+| **Setups** | Save/load the full config (view, sort, filters, session search, group search) as named presets. See [Setups](#setups) below |
 | **Settings** | Configure session paths, DB path, Dobby mode, and theme |
 
 **Keyboard shortcut**: `Ctrl+R` rescans all sessions.
@@ -38,6 +38,9 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 ### Filters
 ![Filters](docs/gifs/filters.gif)
+
+### Setups
+![Setups](docs/gifs/setups.gif)
 
 ## Right-Click Context Menu
 
