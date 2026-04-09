@@ -3,6 +3,7 @@ import { writable } from 'svelte/store';
 export interface AppSettings {
   enableDobby: boolean;
   copilotCliPath: string;
+  dobbyAgentsPaths: string;
 }
 
 const STORAGE_KEY = 'chasm-settings';
@@ -10,6 +11,7 @@ const STORAGE_KEY = 'chasm-settings';
 const defaultSettings: AppSettings = {
   enableDobby: false,
   copilotCliPath: '',
+  dobbyAgentsPaths: 'C:\\dobby\\agents',
 };
 
 function loadSettings(): AppSettings {

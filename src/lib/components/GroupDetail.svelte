@@ -21,9 +21,11 @@
     return '';
   });
 
-  const isDobbyPath = $derived(
-    sessionPath.toLowerCase().startsWith('c:\\dobby\\agents')
-  );
+  const isDobbyPath = $derived.by(() => {
+    const lower = sessionPath.toLowerCase();
+    const paths = ($settings.dobbyAgentsPaths || '').split(';').map(p => p.trim().toLowerCase()).filter(Boolean);
+    return paths.some(p => lower.startsWith(p));
+  });
 
   let showTypePicker = $state(false);
   let launching = $state(false);

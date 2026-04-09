@@ -107,6 +107,7 @@ The panel auto-refreshes when:
 Access settings via the ⚙️ gear icon in the toolbar:
 
 - **Enable Dobby** — toggle Dobby adapter (experimental, for `c:\dobby\agents` paths)
+- **Dobby Agent Paths** — when Dobby is enabled, configure semicolon-separated list of agent directories (e.g., `C:\dobby\agents;D:\projects\agents`); the built-in Dobby view and new-session validation use these paths
 - **Copilot CLI Path** — override the default `~/.copilot` directory with a custom path; validates that the path exists before applying; persists across restarts
 - **Reindex** (experimental) — triggers `/chronicle reindex` to rebuild the Copilot CLI session index, useful when deleted sessions still appear
 

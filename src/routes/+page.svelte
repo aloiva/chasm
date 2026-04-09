@@ -77,6 +77,16 @@
       }
     }
 
+    // Apply saved Dobby paths
+    const dobby = get(settings).dobbyAgentsPaths;
+    if (dobby) {
+      try {
+        await invoke('set_dobby_paths', { paths: dobby });
+      } catch {
+        // ignore
+      }
+    }
+
     await scanSessions();
 
     // Listen for file watcher events to auto-refresh
