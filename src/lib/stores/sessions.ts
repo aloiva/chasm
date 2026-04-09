@@ -121,10 +121,10 @@ export const filteredSessions = derived(
       const matchers = parseSearchTerms($query);
       if (matchers.length > 0) {
         result = result.filter(s => {
-          const haystack = [
-            s.title, s.first_message, s.cwd, s.branch, s.id
-          ].map(v => (v ?? '').toLowerCase()).join(' ');
-          return matchers.some(m => m(haystack));
+          // Test each field independently so startswith=/endswith= work per-field
+          const fields = [s.title, s.first_message, s.cwd, s.branch, s.id]
+            .map(v => v ?? '');
+          return matchers.some(m => fields.some(f => m(f)));
         });
       }
     }
