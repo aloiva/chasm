@@ -24,6 +24,14 @@ impl CopilotCliSource {
         }
     }
 
+    pub fn set_copilot_dir(&mut self, path: PathBuf) {
+        self.copilot_dir = path;
+    }
+
+    pub fn copilot_dir(&self) -> &PathBuf {
+        &self.copilot_dir
+    }
+
     fn db_path(&self) -> PathBuf {
         self.copilot_dir.join("session-store.db")
     }
@@ -375,5 +383,12 @@ impl SessionSource for CopilotCliSource {
         // AND session-store.db directly (turn count updates, new sessions).
         // The DB file lives in the parent copilot_dir, not under session-state/.
         vec![self.session_state_dir(), self.db_path()]
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }

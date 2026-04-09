@@ -9,6 +9,7 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import GroupContextMenu from '$lib/components/GroupContextMenu.svelte';
   import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin } from '$lib/stores/sessions';
+  import { settings } from '$lib/stores/settings';
   import type { SessionSummary } from '$lib/types/session';
 
   let contextMenu = $state<{ session: SessionSummary; x: number; y: number } | null>(null);
@@ -63,7 +64,19 @@
     }
   }
 
+  import { get } from 'svelte/store';
+
   onMount(async () => {
+    // Apply saved custom Copilot CLI path before first scan
+    const saved = get(settings).copilotCliPath;
+    if (saved) {
+      try {
+        await invoke('set_copilot_cli_path', { path: saved });
+      } catch {
+        // Path may no longer exist — ignore, use default
+      }
+    }
+
     await scanSessions();
 
     // Listen for file watcher events to auto-refresh

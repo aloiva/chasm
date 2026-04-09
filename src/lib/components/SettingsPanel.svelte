@@ -5,12 +5,35 @@
   let open = $state(false);
   let confirmingReindex = $state(false);
   let reindexStatus = $state<'idle' | 'running' | 'done' | 'error'>('idle');
+  let copilotPath = $state('');
+  let pathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let pathError = $state('');
+
+  async function loadCopilotPath() {
+    try {
+      const saved = $settings.copilotCliPath;
+      if (saved) {
+        copilotPath = saved;
+      } else {
+        copilotPath = await invoke<string>('get_copilot_cli_path');
+      }
+    } catch {
+      copilotPath = '';
+    }
+  }
+
+  // Load the path when the component mounts
+  $effect(() => {
+    loadCopilotPath();
+  });
 
   function toggle() {
     open = !open;
     if (!open) {
       confirmingReindex = false;
       reindexStatus = 'idle';
+      pathStatus = 'idle';
+      pathError = '';
     }
   }
 
@@ -19,6 +42,32 @@
     if (!target.closest('.settings-container')) {
       open = false;
       confirmingReindex = false;
+    }
+  }
+
+  async function saveCopilotPath() {
+    pathStatus = 'saving';
+    pathError = '';
+    try {
+      await invoke('set_copilot_cli_path', { path: copilotPath });
+      updateSetting('copilotCliPath', copilotPath);
+      pathStatus = 'saved';
+    } catch (e: any) {
+      pathStatus = 'error';
+      pathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
+    }
+  }
+
+  async function resetCopilotPath() {
+    try {
+      const defaultPath = await invoke<string>('get_copilot_cli_path');
+      copilotPath = defaultPath;
+      updateSetting('copilotCliPath', '');
+      await invoke('set_copilot_cli_path', { path: defaultPath });
+      pathStatus = 'idle';
+      pathError = '';
+    } catch {
+      // ignore
     }
   }
 
@@ -55,6 +104,28 @@
         />
         <span class="setting-label">Enable Dobby</span>
       </label>
+
+      <div class="settings-divider"></div>
+      <div class="settings-header">Copilot CLI Path</div>
+
+      <div class="path-setting">
+        <input
+          type="text"
+          class="path-input"
+          placeholder="~/.copilot"
+          bind:value={copilotPath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveCopilotPath(); }}
+        />
+        <div class="path-actions">
+          <button class="path-btn" onclick={saveCopilotPath} title="Apply path">Apply</button>
+          <button class="path-btn path-reset" onclick={resetCopilotPath} title="Reset to default">Reset</button>
+        </div>
+        {#if pathStatus === 'saved'}
+          <span class="path-status saved">✓ Saved — refresh to reload sessions</span>
+        {:else if pathStatus === 'error'}
+          <span class="path-status error">{pathError}</span>
+        {/if}
+      </div>
 
       <div class="settings-divider"></div>
       <div class="settings-header">Experimental</div>
@@ -221,6 +292,67 @@
     color: var(--accent);
   }
   .status-badge.error {
+    color: var(--danger);
+  }
+
+  .path-setting {
+    padding: 6px 12px;
+  }
+
+  .path-input {
+    width: 100%;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+    box-sizing: border-box;
+  }
+  .path-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .path-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .path-btn {
+    padding: 3px 8px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: var(--bg-primary);
+    font-size: var(--font-size-small);
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+  .path-btn:hover {
+    opacity: 0.9;
+  }
+
+  .path-reset {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+  }
+  .path-reset:hover {
+    color: var(--text-primary);
+  }
+
+  .path-status {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+  .path-status.saved {
+    color: var(--accent);
+  }
+  .path-status.error {
     color: var(--danger);
   }
 </style>

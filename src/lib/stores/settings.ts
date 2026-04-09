@@ -2,12 +2,14 @@ import { writable } from 'svelte/store';
 
 export interface AppSettings {
   enableDobby: boolean;
+  copilotCliPath: string;
 }
 
 const STORAGE_KEY = 'chasm-settings';
 
 const defaultSettings: AppSettings = {
   enableDobby: false,
+  copilotCliPath: '',
 };
 
 function loadSettings(): AppSettings {

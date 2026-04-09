@@ -358,4 +358,11 @@ impl SessionSource for VsCodeCopilotSource {
     fn watch_paths(&self) -> Vec<PathBuf> {
         vec![self.workspace_storage_dir.clone()]
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }

@@ -2,6 +2,7 @@ pub mod copilot_cli;
 pub mod vscode_copilot;
 
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -150,6 +151,10 @@ pub trait SessionSource: Send + Sync {
 
     /// Directories to watch for filesystem changes (for live updates).
     fn watch_paths(&self) -> Vec<PathBuf>;
+
+    /// Downcast support for source-specific configuration.
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// Registry of all enabled source adapters.
@@ -176,6 +181,10 @@ impl SourceRegistry {
 
     pub fn get_source(&self, name: &str) -> Option<&dyn SessionSource> {
         self.sources.iter().find(|s| s.name() == name).map(|s| s.as_ref())
+    }
+
+    pub fn get_source_mut(&mut self, name: &str) -> Option<&mut Box<dyn SessionSource>> {
+        self.sources.iter_mut().find(|s| s.name() == name)
     }
 
     /// Scan all enabled sources, collecting sessions and warnings.
