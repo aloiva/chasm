@@ -11,9 +11,15 @@
  * Combinators:
  *   ,  (comma) — OR logic across groups
  *   +  (plus)  — AND logic within a group
+ *   ( )        — grouping to override precedence
  *
- * Example: startswith=C:\foo+endswith=bar,baz
- *   → (starts with C:\foo AND ends with bar) OR (contains baz)
+ * Precedence: AND (+) binds tighter than OR (,), parentheses override.
+ *
+ * Examples:
+ *   startswith=C:\foo+endswith=bar,baz
+ *     → (starts with C:\foo AND ends with bar) OR (contains baz)
+ *   (A,B)+C
+ *     → (A OR B) AND C
  */
 
 export type Matcher = (text: string) => boolean;
@@ -57,30 +63,97 @@ function parseTerm(raw: string): Matcher {
 }
 
 /**
- * Parse a single OR-group (may contain + for AND) into one compound Matcher.
- * If the group has no +, returns a single-term matcher.
- * If the group has +, all sub-terms must match (AND logic).
+ * Tokenize input into atoms, preserving operator=value as single tokens.
+ * Tokens: '(' ')' ',' '+' and text atoms.
  */
-function parseGroup(group: string): Matcher {
-  const parts = group.split('+').map((t) => t.trim()).filter(Boolean);
-  if (parts.length === 0) return () => true;
-  if (parts.length === 1) return parseTerm(parts[0]);
-  const matchers = parts.map(parseTerm);
-  return (text) => matchers.every((m) => m(text));
+function tokenize(input: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === '(' || ch === ')' || ch === ',' || ch === '+') {
+      tokens.push(ch);
+      i++;
+    } else if (ch === ' ') {
+      i++;
+    } else {
+      // Consume text atom until we hit a combinator or paren
+      let atom = '';
+      while (i < input.length && input[i] !== ',' && input[i] !== '+' && input[i] !== '(' && input[i] !== ')') {
+        atom += input[i];
+        i++;
+      }
+      const trimmed = atom.trim();
+      if (trimmed) tokens.push(trimmed);
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Recursive descent parser for search expressions.
+ *
+ * Grammar:
+ *   expr     → andExpr (',' andExpr)*
+ *   andExpr  → primary ('+' primary)*
+ *   primary  → '(' expr ')' | TERM
+ *
+ * Returns a single Matcher representing the full expression.
+ */
+function parseExpr(tokens: string[], pos: { i: number }): Matcher {
+  // Skip leading commas
+  while (pos.i < tokens.length && tokens[pos.i] === ',') pos.i++;
+  if (pos.i >= tokens.length) return () => true;
+  const orParts: Matcher[] = [parseAndExpr(tokens, pos)];
+  while (pos.i < tokens.length && tokens[pos.i] === ',') {
+    pos.i++; // consume ','
+    // Skip consecutive commas
+    while (pos.i < tokens.length && tokens[pos.i] === ',') pos.i++;
+    if (pos.i < tokens.length && tokens[pos.i] !== ')') {
+      orParts.push(parseAndExpr(tokens, pos));
+    }
+  }
+  if (orParts.length === 1) return orParts[0];
+  return (text) => orParts.some((m) => m(text));
+}
+
+function parseAndExpr(tokens: string[], pos: { i: number }): Matcher {
+  const andParts: Matcher[] = [parsePrimary(tokens, pos)];
+  while (pos.i < tokens.length && tokens[pos.i] === '+') {
+    pos.i++; // consume '+'
+    andParts.push(parsePrimary(tokens, pos));
+  }
+  if (andParts.length === 1) return andParts[0];
+  return (text) => andParts.every((m) => m(text));
+}
+
+function parsePrimary(tokens: string[], pos: { i: number }): Matcher {
+  if (pos.i >= tokens.length) return () => true;
+  const tok = tokens[pos.i];
+  if (tok === ',' || tok === '+' || tok === ')') return () => true; // empty operand
+  if (tok === '(') {
+    pos.i++; // consume '('
+    const matcher = parseExpr(tokens, pos);
+    if (pos.i < tokens.length && tokens[pos.i] === ')') {
+      pos.i++; // consume ')'
+    }
+    return matcher;
+  }
+  return parseTerm(tokens[pos.i++]);
 }
 
 /**
  * Parse a search string into an array of Matchers.
- * Comma = OR across groups, + = AND within a group.
+ * Comma = OR, + = AND, parentheses for grouping.
  * Returns empty array if input is blank.
  */
 export function parseSearchTerms(input: string): Matcher[] {
   if (!input.trim()) return [];
-  return input
-    .split(',')
-    .map((g) => g.trim())
-    .filter(Boolean)
-    .map(parseGroup);
+  const tokens = tokenize(input);
+  if (tokens.length === 0) return [];
+  const pos = { i: 0 };
+  const matcher = parseExpr(tokens, pos);
+  return [matcher];
 }
 
 /**

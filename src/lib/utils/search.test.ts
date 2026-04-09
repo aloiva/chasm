@@ -180,8 +180,8 @@ describe('edge cases', () => {
   it('whitespace-only search matches everything', () => {
     expect(matches('   ', 'anything')).toBe(true);
   });
-  it('single comma gives two empty groups — matches all', () => {
-    // split(',') on ',' gives ['', ''] — both filtered out
+  it('single comma gives two empty groups — no matchers', () => {
+    // Tokenizer produces no tokens from ',' alone
     expect(matches(',', 'anything')).toBe(true);
   });
   it('trailing comma is ignored', () => {
@@ -190,8 +190,9 @@ describe('edge cases', () => {
   });
   it('leading comma is ignored', () => {
     expect(matches(',test', 'test chat')).toBe(true);
+    expect(matches(',test', 'nope')).toBe(false);
   });
-  it('plus only gives empty group — matches all', () => {
+  it('plus only gives empty group — no matchers', () => {
     expect(matches('+', 'anything')).toBe(true);
   });
   it('operator with empty value is treated as always-true', () => {
@@ -222,7 +223,54 @@ describe('matchesAny', () => {
   });
 });
 
-// --------------- Real-world scenarios ---------------
+// --------------- Parentheses grouping ---------------
+
+describe('parentheses grouping', () => {
+  it('(A,B)+C — both A and B must also match C', () => {
+    // (A OR B) AND C
+    expect(matches('(foo,bar)+baz', 'foobaz')).toBe(true);
+    expect(matches('(foo,bar)+baz', 'barbaz')).toBe(true);
+    expect(matches('(foo,bar)+baz', 'foo')).toBe(false);
+    expect(matches('(foo,bar)+baz', 'baz')).toBe(false);
+  });
+  it('A+(B,C) — A AND (B OR C)', () => {
+    expect(matches('test+(chat,session)', 'test chat')).toBe(true);
+    expect(matches('test+(chat,session)', 'test session')).toBe(true);
+    expect(matches('test+(chat,session)', 'test other')).toBe(false);
+    expect(matches('test+(chat,session)', 'chat')).toBe(false);
+  });
+  it('(A,B)+(C,D) — (A OR B) AND (C OR D)', () => {
+    expect(matches('(foo,bar)+(x,y)', 'foox')).toBe(true);
+    expect(matches('(foo,bar)+(x,y)', 'bary')).toBe(true);
+    expect(matches('(foo,bar)+(x,y)', 'fooz')).toBe(false);
+    expect(matches('(foo,bar)+(x,y)', 'qx')).toBe(false);
+  });
+  it('nested parens', () => {
+    expect(matches('((a,b)+c)', 'ac')).toBe(true);
+    expect(matches('((a,b)+c)', 'bc')).toBe(true);
+    expect(matches('((a,b)+c)', 'a')).toBe(false);
+  });
+  it('parens with operators', () => {
+    expect(matches('(startswith=feat,startswith=fix)+!test', 'feat/auth')).toBe(true);
+    expect(matches('(startswith=feat,startswith=fix)+!test', 'fix/login')).toBe(true);
+    expect(matches('(startswith=feat,startswith=fix)+!test', 'feat/test-utils')).toBe(false);
+    expect(matches('(startswith=feat,startswith=fix)+!test', 'main')).toBe(false);
+  });
+  it('without parens, AND binds tighter: A,B+C = A OR (B AND C)', () => {
+    // Without parens: foo,bar+baz = foo OR (bar AND baz)
+    expect(matches('foo,bar+baz', 'foo')).toBe(true);      // matches foo
+    expect(matches('foo,bar+baz', 'barbaz')).toBe(true);   // matches bar+baz
+    expect(matches('foo,bar+baz', 'bar')).toBe(false);      // bar alone doesn't match
+  });
+  it('empty parens are harmless', () => {
+    expect(matches('()', 'anything')).toBe(true);
+  });
+  it('paren group ORed with plain term', () => {
+    expect(matches('(a+b),c', 'ab')).toBe(true);
+    expect(matches('(a+b),c', 'c')).toBe(true);
+    expect(matches('(a+b),c', 'a')).toBe(false);
+  });
+});
 
 describe('real-world session search scenarios', () => {
   it('Dobby setup: startswith + endswith (AND)', () => {
