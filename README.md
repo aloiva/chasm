@@ -28,6 +28,7 @@ npm run tauri build
 
 ## Architecture
 
+See [docs/FEATURES.md](docs/FEATURES.md) for a full list of features and capabilities.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the source adapter plugin system.
 See [docs/DECISIONS.md](docs/DECISIONS.md) for design decisions with measured reasoning.
 See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for data format reference.
