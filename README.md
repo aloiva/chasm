@@ -19,7 +19,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 | Button | What it does |
 |--------|-------------|
-| **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`. Use `,` for OR, `+` for AND |
+| **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`. Use `,` for OR, `+` for AND, `()` for grouping |
 | **View** | Switch grouping: Source, Folder, Branch, Date |
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — title, folder, branch, turn count, checkpoints, status, date range. Filters support the same operators as search |
@@ -49,7 +49,8 @@ Searches across all session metadata: title, session ID, folder path, branch, so
 
 - Multiple terms separated by `,` (comma) — matches any term (**OR** logic)
 - Terms joined by `+` (plus) — all must match (**AND** logic within the group)
-- Combined: `A+B,C` = (A AND B) OR C
+- Parentheses `()` override precedence: `(A,B)+C` = (A OR B) AND C
+- Without parens, AND binds tighter: `A,B+C` = A OR (B AND C)
 - **Search operators** (default is `contains` when no operator is specified):
   - `startswith=value` — matches sessions where any field starts with value
   - `endswith=value` — matches sessions where any field ends with value
@@ -66,7 +67,7 @@ Filters which **groups** are visible based on the group label text in the curren
 - In **Source view** → searches source names (e.g. "Copilot CLI")
 - In **Date view** → searches date bucket labels
 
-Same operators and combinators as session search: `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `,` for OR, `+` for AND.
+Same operators and combinators as session search: `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `,` for OR, `+` for AND, `()` for grouping.
 
 ## Setups
 
