@@ -167,8 +167,9 @@ export const filteredSessions = derived(
       const matchers = parseSearchTerms($filters.titleFilter);
       if (matchers.length > 0) {
         result = result.filter(s => {
-          const title = s.title ?? '';
-          return matchesAny(matchers, title);
+          // Match against the display title: title, or first_message fallback
+          const display = s.title ?? s.first_message ?? '';
+          return matchesAny(matchers, display);
         });
       }
     }
