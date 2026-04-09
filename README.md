@@ -104,13 +104,13 @@ chasm has two configurable paths in **Settings** for Copilot CLI:
 
 If your sessions are stored elsewhere (e.g. older Copilot CLI versions used `~/.copilot/history-session-state/`), you can configure the paths individually.
 
-Multiple paths can be specified **comma-separated**:
+Multiple paths can be specified **comma-separated** for both settings:
 
 ```
 C:\Users\you\.copilot\session-state, C:\Users\you\.copilot-old\session-state
 ```
 
-chasm will use the first valid path it finds. This is useful when migrating between Copilot CLI versions or when session data lives in non-default locations.
+All valid paths are scanned and sessions are merged (deduplicated by session ID). This is useful when migrating between Copilot CLI versions or when session data lives in multiple locations.
 
 ## Documentation
 

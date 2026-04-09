@@ -50,7 +50,7 @@
       <input
         type="text"
         class="group-filter"
-        placeholder="Filter groups... (comma-separated, /regex/)"
+        placeholder="Search in groups as per view.. (ex. repo1,repo2 (if folder view), copilot cli (if source view), dev,master (if branch view))"
         bind:value={$groupFilter}
       />
       {#if $groupFilter}

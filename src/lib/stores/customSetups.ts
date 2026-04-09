@@ -13,6 +13,7 @@ import {
 
 export interface CustomSetupConfig {
   viewMode: 'source' | 'folder' | 'branch' | 'date';
+  searchQuery: string;
   groupFilter: string;
   collapseAll: boolean;
   sortBy: 'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source';
@@ -35,6 +36,7 @@ const builtInSetups: CustomSetup[] = [
     builtIn: true,
     config: {
       viewMode: 'source',
+      searchQuery: '',
       groupFilter: 'Copilot CLI',
       collapseAll: false,
       sortBy: 'updated',
@@ -47,6 +49,7 @@ const builtInSetups: CustomSetup[] = [
     builtIn: true,
     config: {
       viewMode: 'source',
+      searchQuery: '',
       groupFilter: 'VS Code Copilot',
       collapseAll: false,
       sortBy: 'updated',
@@ -59,6 +62,7 @@ const builtInSetups: CustomSetup[] = [
     builtIn: true,
     config: {
       viewMode: 'folder',
+      searchQuery: '',
       groupFilter: 'C:\\dobby\\agents',
       collapseAll: true,
       sortBy: 'updated',
@@ -96,6 +100,7 @@ export function applySetup(setup: CustomSetup) {
   viewMode.set(config.viewMode);
 
   // Now set the rest (after subscriber has fired)
+  searchQuery.set(config.searchQuery ?? '');
   groupFilter.set(config.groupFilter);
   sortBy.set(config.sortBy);
   filters.set({ ...config.filters });
@@ -123,6 +128,7 @@ export function saveCurrentAsSetup(name: string): CustomSetup {
     builtIn: false,
     config: {
       viewMode: get(viewMode),
+      searchQuery: get(searchQuery),
       groupFilter: get(groupFilter),
       collapseAll,
       sortBy: get(sortBy),

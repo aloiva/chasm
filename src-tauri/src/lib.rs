@@ -5,6 +5,7 @@ use adapters::{
     SessionDetail, SessionSummary, SourceRegistry,
 };
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::PathBuf;
 use std::process::Command as StdCommand;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -312,7 +313,11 @@ fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
         .as_any()
         .downcast_ref::<CopilotCliSource>()
         .ok_or("Downcast failed")?;
-    Ok(cli.session_state_dir_path().to_string_lossy().to_string())
+    let joined = cli.session_state_dirs().iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(joined)
 }
 
 #[tauri::command]
@@ -325,11 +330,19 @@ fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), Stri
         .as_any_mut()
         .downcast_mut::<CopilotCliSource>()
         .ok_or("Downcast failed")?;
-    let pb = std::path::PathBuf::from(&path);
-    if !pb.exists() {
-        return Err(format!("Path does not exist: {}", path));
+    let paths: Vec<PathBuf> = path.split(',')
+        .map(|s| PathBuf::from(s.trim()))
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect();
+    if paths.is_empty() {
+        return Err("No valid paths provided".to_string());
     }
-    cli.set_session_state_dir(pb);
+    for p in &paths {
+        if !p.exists() {
+            return Err(format!("Path does not exist: {}", p.display()));
+        }
+    }
+    cli.set_session_state_dirs(paths);
     Ok(())
 }
 
@@ -341,7 +354,11 @@ fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
         .as_any()
         .downcast_ref::<CopilotCliSource>()
         .ok_or("Downcast failed")?;
-    Ok(cli.db_file_path().to_string_lossy().to_string())
+    let joined = cli.db_files().iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(joined)
 }
 
 #[tauri::command]
@@ -354,11 +371,19 @@ fn set_copilot_db_path(state: State<AppState>, path: String) -> Result<(), Strin
         .as_any_mut()
         .downcast_mut::<CopilotCliSource>()
         .ok_or("Downcast failed")?;
-    let pb = std::path::PathBuf::from(&path);
-    if !pb.exists() {
-        return Err(format!("Path does not exist: {}", path));
+    let paths: Vec<PathBuf> = path.split(',')
+        .map(|s| PathBuf::from(s.trim()))
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect();
+    if paths.is_empty() {
+        return Err("No valid paths provided".to_string());
     }
-    cli.set_db_file(pb);
+    for p in &paths {
+        if !p.exists() {
+            return Err(format!("Path does not exist: {}", p.display()));
+        }
+    }
+    cli.set_db_files(paths);
     Ok(())
 }
 

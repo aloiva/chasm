@@ -44,9 +44,10 @@ Right-click any session card to access:
 
 ## browsing & filtering
 
-### search
+### session search
 
 - Real-time text search filters sessions by name, ID, or summary
+- Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`)
 - Debounced input to avoid excessive re-renders
 
 ### sort options
@@ -60,9 +61,10 @@ Right-click any session card to access:
 - Use the **group filter** to narrow down to a specific source (e.g. type `Copilot CLI` to show only that group)
 - Built-in setups "Copilot CLI Sessions" and "VS Code Chat Sessions" apply this automatically
 
-### group filter
+### group search
 
-- Filter visible groups in real-time using the filter input
+- Filter visible groups in real-time using the group search input
+- Placeholder is contextual: shows examples based on current view (e.g., `repo1,repo2` for folder view, `copilot cli` for source view, `dev,master` for branch view)
 - **Multiple patterns**: use commas to search for multiple terms (e.g., `dobby,project-x` shows groups matching either)
 - **Regex support**: wrap a pattern in `/regex/flags` for regex matching (e.g., `/^C:\\projects/i`)
 - Invalid regex gracefully falls back to plain text search
@@ -117,15 +119,15 @@ The panel auto-refreshes when:
 Access settings via the ⚙️ gear icon in the toolbar:
 
 - **Enable Dobby** — toggle Dobby adapter (experimental, for Dobby agent sessions)
-- **Copilot CLI Sessions Path** — override the default `~/.copilot/session-state` directory with a custom path (comma-separated for multiple paths); validates that the path exists before applying; persists across restarts
-- **Session Store DB Path** — override the default `~/.copilot/session-store.db` file path; used for session metadata, turns, and checkpoints; validates that the path exists before applying; persists across restarts
+- **Copilot CLI Sessions Path** — override the default `~/.copilot/session-state` directory; supports multiple comma-separated paths (all are scanned and sessions are merged); validates that each path exists before applying; persists across restarts
+- **Session Store DB Path** — override the default `~/.copilot/session-store.db` file path; supports multiple comma-separated paths (all DBs are queried and sessions are deduplicated by ID); validates that each path exists before applying; persists across restarts
 - **Reindex** (experimental) — triggers `/chronicle reindex` to rebuild the Copilot CLI session index, useful when deleted sessions still appear
 
 ---
 
 ## custom setups
 
-- Save the current view configuration (view mode, group filter, sort, filters) as a named setup
+- Save the current view configuration (view mode, session search, group search, sort, filters) as a named setup
 - Built-in **Copilot CLI Sessions** setup: switches to source view filtered to Copilot CLI
 - Built-in **VS Code Chat Sessions** setup: switches to source view filtered to VS Code Copilot
 - Built-in **Dobby** setup: switches to folder view filtered to `C:\dobby\agents` (visible when Dobby is enabled in settings)

@@ -24,7 +24,7 @@
     <input
       type="text"
       class="search"
-      placeholder="Search sessions... (comma-separated)"
+      placeholder="Search in sessions.. (ex. repo1,title1,title2)"
       bind:value={$searchQuery}
     />
     {#if $searchQuery}

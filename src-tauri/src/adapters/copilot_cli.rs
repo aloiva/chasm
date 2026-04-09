@@ -8,12 +8,12 @@ use std::path::PathBuf;
 
 /// Source adapter for GitHub Copilot CLI sessions.
 ///
-/// Data sources:
-/// - session_state_dir (default: ~/.copilot/session-state/) — session folders with workspace.yaml, events.jsonl
-/// - db_path (default: ~/.copilot/session-store.db) — SQLite DB with sessions, turns, checkpoints, files
+/// Data sources (supports multiple comma-separated paths):
+/// - session_state_dirs (default: ~/.copilot/session-state/) — session folders with workspace.yaml, events.jsonl
+/// - db_files (default: ~/.copilot/session-store.db) — SQLite DBs with sessions, turns, checkpoints, files
 pub struct CopilotCliSource {
-    session_state_dir: PathBuf,
-    db_file: PathBuf,
+    session_state_dirs: Vec<PathBuf>,
+    db_files: Vec<PathBuf>,
 }
 
 impl CopilotCliSource {
@@ -21,54 +21,69 @@ impl CopilotCliSource {
         let home = dirs::home_dir().unwrap_or_default();
         let copilot_dir = home.join(".copilot");
         Self {
-            session_state_dir: copilot_dir.join("session-state"),
-            db_file: copilot_dir.join("session-store.db"),
+            session_state_dirs: vec![copilot_dir.join("session-state")],
+            db_files: vec![copilot_dir.join("session-store.db")],
         }
     }
 
-    pub fn set_session_state_dir(&mut self, path: PathBuf) {
-        self.session_state_dir = path;
+    pub fn set_session_state_dirs(&mut self, paths: Vec<PathBuf>) {
+        self.session_state_dirs = paths;
     }
 
-    pub fn set_db_file(&mut self, path: PathBuf) {
-        self.db_file = path;
+    pub fn set_db_files(&mut self, paths: Vec<PathBuf>) {
+        self.db_files = paths;
     }
 
-    pub fn session_state_dir_path(&self) -> &PathBuf {
-        &self.session_state_dir
+    pub fn session_state_dirs(&self) -> &Vec<PathBuf> {
+        &self.session_state_dirs
     }
 
-    pub fn db_file_path(&self) -> &PathBuf {
-        &self.db_file
+    pub fn db_files(&self) -> &Vec<PathBuf> {
+        &self.db_files
     }
 
-    fn db_path(&self) -> PathBuf {
-        self.db_file.clone()
+    /// Open all available DB connections (read-only).
+    fn open_dbs(&self) -> Vec<Connection> {
+        self.db_files
+            .iter()
+            .filter(|p| p.exists())
+            .filter_map(|p| {
+                Connection::open_with_flags(p, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()
+            })
+            .collect()
     }
 
-    fn session_state_dir(&self) -> PathBuf {
-        self.session_state_dir.clone()
-    }
-
+    /// Open the first available DB (for detail/resume lookups).
     fn open_db(&self) -> Result<Connection, SourceError> {
-        let path = self.db_path();
-        if !path.exists() {
-            return Err(SourceError::Fatal(format!(
-                "session-store.db not found at {}",
-                path.display()
-            )));
+        for path in &self.db_files {
+            if path.exists() {
+                return Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(|e| SourceError::Warning(format!("Failed to open {}: {}", path.display(), e)));
+            }
         }
-        // Open read-only to avoid locking issues with running Copilot
-        Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|e| SourceError::Warning(format!("Failed to open session-store.db: {}", e)))
+        Err(SourceError::Fatal("No session-store.db found in any configured path".to_string()))
+    }
+
+    /// Find the session_state_dir that contains a given session ID.
+    fn find_session_dir(&self, session_id: &str) -> Option<PathBuf> {
+        for dir in &self.session_state_dirs {
+            let candidate = dir.join(session_id);
+            if candidate.exists() {
+                return Some(dir.clone());
+            }
+        }
+        None
+    }
+
+    /// Get the primary session_state_dir (first in list, used for storage_path fallback).
+    fn primary_session_state_dir(&self) -> PathBuf {
+        self.session_state_dirs.first().cloned().unwrap_or_default()
     }
 
     /// Parse workspace.yaml for a session to get summary and cwd.
     fn read_workspace_yaml(&self, session_id: &str) -> Option<(Option<String>, Option<String>)> {
-        let yaml_path = self
-            .session_state_dir()
-            .join(session_id)
-            .join("workspace.yaml");
+        let state_dir = self.find_session_dir(session_id)?;
+        let yaml_path = state_dir.join(session_id).join("workspace.yaml");
         let content = std::fs::read_to_string(&yaml_path).ok()?;
         let yaml: serde_yaml::Value = serde_yaml::from_str(&content).ok()?;
 
@@ -86,10 +101,8 @@ impl CopilotCliSource {
 
     /// Get folder size on disk for a session.
     fn session_size(&self, session_id: &str) -> Option<u64> {
-        let dir = self.session_state_dir().join(session_id);
-        if !dir.exists() {
-            return None;
-        }
+        let state_dir = self.find_session_dir(session_id)?;
+        let dir = state_dir.join(session_id);
         let mut total = 0u64;
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
@@ -103,11 +116,15 @@ impl CopilotCliSource {
 
     /// Check if session has checkpoints directory with files.
     fn has_checkpoints(&self, session_id: &str) -> bool {
-        let checkpoint_dir = self.session_state_dir().join(session_id).join("checkpoints");
-        checkpoint_dir.exists()
-            && std::fs::read_dir(&checkpoint_dir)
-                .map(|mut entries| entries.next().is_some())
-                .unwrap_or(false)
+        if let Some(state_dir) = self.find_session_dir(session_id) {
+            let checkpoint_dir = state_dir.join(session_id).join("checkpoints");
+            checkpoint_dir.exists()
+                && std::fs::read_dir(&checkpoint_dir)
+                    .map(|mut entries| entries.next().is_some())
+                    .unwrap_or(false)
+        } else {
+            false
+        }
     }
 
     /// Look up session cwd from workspace.yaml first, then DB.
@@ -146,15 +163,22 @@ impl SessionSource for CopilotCliSource {
     }
 
     fn is_available(&self) -> bool {
-        self.db_path().exists()
+        self.db_files.iter().any(|p| p.exists())
     }
 
     fn scan(&self) -> Result<Vec<SessionSummary>, SourceError> {
-        let conn = self.open_db()?;
+        let conns = self.open_dbs();
+        if conns.is_empty() {
+            return Err(SourceError::Fatal("No session-store.db found in any configured path".to_string()));
+        }
+
         let mut sessions = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+
+        for conn in &conns {
 
         // Query sessions with turn count and first message
-        let mut stmt = conn
+        let stmt = conn
             .prepare(
                 "SELECT s.id, s.cwd, s.branch, s.summary, s.created_at, s.updated_at,
                         (SELECT COUNT(*) FROM turns t WHERE t.session_id = s.id) as turn_count,
@@ -162,11 +186,17 @@ impl SessionSource for CopilotCliSource {
                          WHERE t2.session_id = s.id AND t2.turn_index = 0) as first_msg
                  FROM sessions s
                  ORDER BY s.updated_at DESC",
-            )
-            .map_err(|e| SourceError::Warning(format!("SQL prepare failed: {}", e)))?;
+            );
 
-        let rows = stmt
-            .query_map([], |row| {
+        let mut stmt = match stmt {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[copilot-cli] Warning: SQL prepare failed for a DB: {}", e);
+                continue;
+            }
+        };
+
+        let rows = match stmt.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,           // id
                     row.get::<_, Option<String>>(1)?,    // cwd
@@ -177,19 +207,29 @@ impl SessionSource for CopilotCliSource {
                     row.get::<_, u32>(6)?,               // turn_count
                     row.get::<_, Option<String>>(7)?,    // first_msg
                 ))
-            })
-            .map_err(|e| SourceError::Warning(format!("SQL query failed: {}", e)))?;
+            }) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[copilot-cli] Warning: SQL query failed for a DB: {}", e);
+                continue;
+            }
+        };
 
         for row in rows {
             match row {
                 Ok((id, cwd, branch, summary, created_at, updated_at, turn_count, first_msg)) => {
+                    if !seen_ids.insert(id.clone()) {
+                        continue; // skip duplicate session IDs from other DBs
+                    }
                     // Enrich with workspace.yaml data (may have more recent summary/cwd)
                     let (yaml_summary, yaml_cwd) =
                         self.read_workspace_yaml(&id).unwrap_or((None, None));
 
                     let title = yaml_summary.or(summary);
                     let effective_cwd = yaml_cwd.or(cwd);
-                    let exists = self.session_state_dir().join(&id).exists();
+                    let found_dir = self.find_session_dir(&id);
+                    let exists = found_dir.is_some();
+                    let storage_dir = found_dir.unwrap_or_else(|| self.primary_session_state_dir());
 
                     sessions.push(SessionSummary {
                         id: id.clone(),
@@ -204,17 +244,18 @@ impl SessionSource for CopilotCliSource {
                         size_bytes: self.session_size(&id),
                         has_checkpoints: self.has_checkpoints(&id),
                         exists_on_disk: exists,
-                        storage_path: Some(self.session_state_dir().join(&id).to_string_lossy().into_owned()),
+                        storage_path: Some(storage_dir.join(&id).to_string_lossy().into_owned()),
                         status: super::compute_status(&updated_at),
                         extra: HashMap::new(),
                     });
                 }
                 Err(e) => {
-                    // Skip individual broken rows, don't fail entire scan
                     eprintln!("[copilot-cli] Warning: skipping row: {}", e);
                 }
             }
         }
+
+        } // end for conn in &conns
 
         Ok(sessions)
     }
@@ -302,7 +343,7 @@ impl SessionSource for CopilotCliSource {
                 size_bytes: None,
                 has_checkpoints: !checkpoints.is_empty(),
                 exists_on_disk: true,
-                storage_path: Some(self.session_state_dir().join(id).to_string_lossy().into_owned()),
+                storage_path: Some(self.find_session_dir(id).unwrap_or_else(|| self.primary_session_state_dir()).join(id).to_string_lossy().into_owned()),
                 status: None,
                 extra: HashMap::new(),
             });
@@ -316,10 +357,10 @@ impl SessionSource for CopilotCliSource {
     }
 
     fn rename(&self, id: &str, new_name: &str) -> Result<(), SourceError> {
-        let yaml_path = self
-            .session_state_dir()
-            .join(id)
-            .join("workspace.yaml");
+        let state_dir = self.find_session_dir(id).ok_or_else(|| {
+            SourceError::Warning(format!("Session folder not found for {}", id))
+        })?;
+        let yaml_path = state_dir.join(id).join("workspace.yaml");
 
         if !yaml_path.exists() {
             return Err(SourceError::Warning(format!(
@@ -347,13 +388,10 @@ impl SessionSource for CopilotCliSource {
     }
 
     fn delete(&self, id: &str) -> Result<(), SourceError> {
-        let session_dir = self.session_state_dir().join(id);
-        if !session_dir.exists() {
-            return Err(SourceError::Warning(format!(
-                "Session folder not found: {}",
-                id
-            )));
-        }
+        let state_dir = self.find_session_dir(id).ok_or_else(|| {
+            SourceError::Warning(format!("Session folder not found: {}", id))
+        })?;
+        let session_dir = state_dir.join(id);
 
         std::fs::remove_dir_all(&session_dir)
             .map_err(|e| SourceError::Warning(format!("Failed to delete session folder: {}", e)))?;
@@ -389,10 +427,18 @@ impl SessionSource for CopilotCliSource {
     }
 
     fn watch_paths(&self) -> Vec<PathBuf> {
-        // Watch session-state directory (folder changes, workspace.yaml, deletions)
-        // AND session-store.db directly (turn count updates, new sessions).
-        // The DB file lives in the parent copilot_dir, not under session-state/.
-        vec![self.session_state_dir(), self.db_path()]
+        let mut paths = Vec::new();
+        for dir in &self.session_state_dirs {
+            if dir.exists() {
+                paths.push(dir.clone());
+            }
+        }
+        for db in &self.db_files {
+            if db.exists() {
+                paths.push(db.clone());
+            }
+        }
+        paths
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
