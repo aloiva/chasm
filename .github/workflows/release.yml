@@ -39,6 +39,17 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'chasm ${{ github.ref_name }}'
-          releaseBody: 'Download the installer (.exe) or MSI below.'
+          releaseBody: |
+            ### Downloads
+            - **Portable**: `chasm-portable.exe` — no install needed, just run it
+            - **Installer**: `.exe` setup with Start Menu shortcut and uninstaller
+            - **MSI**: for enterprise / GPO deployment
           releaseDraft: false
           prerelease: false
+
+      - name: Upload portable exe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          copy src-tauri\target\release\chasm.exe chasm-portable.exe
+          gh release upload ${{ github.ref_name }} chasm-portable.exe --clobber
