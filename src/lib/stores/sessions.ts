@@ -6,7 +6,7 @@ export const sources = writable<SourceInfo[]>([]);
 export const loading = writable(false);
 export const searchQuery = writable('');
 export const selectedSources = writable<Set<string>>(new Set());
-export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch'>('updated');
+export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source'>('updated');
 export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
 export const selectedSessionId = writable<string | null>(null);
 export const selectedGroupKey = writable<string | null>(null);
@@ -144,7 +144,11 @@ export const filteredSessions = derived(
       result = result.filter(s => s.turn_count > 0);
     }
     if ($filters.status !== null) {
-      result = result.filter(s => s.status === $filters.status);
+      if ($filters.status === 'active') {
+        result = result.filter(s => s.exists_on_disk !== false);
+      } else if ($filters.status === 'deleted') {
+        result = result.filter(s => s.exists_on_disk === false);
+      }
     }
     if ($filters.minTurns !== null) {
       result = result.filter(s => s.turn_count >= ($filters.minTurns ?? 0));
@@ -200,6 +204,10 @@ export const filteredSessions = derived(
           return (a.title ?? '').localeCompare(b.title ?? '');
         case 'branch':
           return (a.branch ?? '').localeCompare(b.branch ?? '');
+        case 'folder':
+          return (a.cwd ?? '').localeCompare(b.cwd ?? '');
+        case 'source':
+          return (a.source ?? '').localeCompare(b.source ?? '');
         default:
           return 0;
       }
@@ -253,13 +261,13 @@ export const groupedSessions = derived(
 );
 
 /** Apply groupFilter to groupedSessions — filters group keys.
- *  Supports semicolon-separated patterns. Wrap in /regex/ for regex matching. */
+ *  Supports comma-separated patterns. Wrap in /regex/ for regex matching. */
 export const filteredGroupedSessions = derived(
   [groupedSessions, groupFilter],
   ([$groups, $filter]) => {
     if (!$filter.trim()) return $groups;
     const patterns = $filter
-      .split(';')
+      .split(',')
       .map((p) => p.trim())
       .filter(Boolean);
     if (patterns.length === 0) return $groups;

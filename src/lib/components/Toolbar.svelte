@@ -41,6 +41,8 @@
     <option value="size">Sort: Size</option>
     <option value="title">Sort: Title (A-Z)</option>
     <option value="branch">Sort: Branch</option>
+    <option value="folder">Sort: Folder</option>
+    <option value="source">Sort: Source</option>
   </select>
   <FilterPanel />
   <CustomSetupSelector />

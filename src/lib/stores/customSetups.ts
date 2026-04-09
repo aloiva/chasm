@@ -16,7 +16,7 @@ export interface CustomSetupConfig {
   groupFilter: string;
   collapseAll: boolean;
   selectedSources: string[];
-  sortBy: 'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch';
+  sortBy: 'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source';
   filters: FilterState;
 }
 

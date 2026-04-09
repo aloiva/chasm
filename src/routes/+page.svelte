@@ -68,12 +68,17 @@
 
   onMount(async () => {
     // Apply saved custom Copilot CLI path before first scan
+    // Supports comma-separated paths; uses the first valid one
     const saved = get(settings).copilotCliPath;
     if (saved) {
-      try {
-        await invoke('set_copilot_cli_path', { path: saved });
-      } catch {
-        // Path may no longer exist — ignore, use default
+      const paths = saved.split(',').map((p: string) => p.trim()).filter(Boolean);
+      for (const p of paths) {
+        try {
+          await invoke('set_copilot_cli_path', { path: p });
+          break;
+        } catch {
+          // Path may no longer exist — try next
+        }
       }
     }
 

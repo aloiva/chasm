@@ -1,12 +1,14 @@
 # chasm
 
-**C**entralised **H**ub for **A**gent **S**ession **M**anager
+**C**entralised **H**ub for **A**gent **S**ession **M**anagement
 
 A lightweight desktop app for managing AI coding sessions across multiple tools.
 
 ## Supported Tools
-- **Copilot CLI** — reads `~/.copilot/session-store.db` and `session-state/` folders
-- **VS Code Copilot Chat** — reads `state.vscdb` from VS Code workspace storage
+- **Copilot CLI** — reads `~/.copilot/session-store.db` and `session-state/` folders (fully supported: resume, rename, delete, preview)
+- **VS Code Copilot Chat** — reads `state.vscdb` from VS Code workspace storage (read-only)
+
+Currently, only the Copilot CLI adapter has full functionality (resume, rename, delete). Other agents or tools will need their own adapter implementing the required traits for each feature. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details on the adapter plugin system.
 
 ## Tech Stack
 - **Backend**: Tauri v2 (Rust) — reads SQLite, YAML, JSON
@@ -20,7 +22,7 @@ A lightweight desktop app for managing AI coding sessions across multiple tools.
 | **Search** | Filter sessions by text (matches title, summary, branch, folder) |
 | **Source** | Toggle which sources are visible (Copilot CLI, VS Code) |
 | **View** | Switch grouping: Flat, Folder, Branch, Date |
-| **Sort** | Order sessions by modified date, created date, turns, size, title, or branch |
+| **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
 | **Setups** | Save/load filter + view combinations as named presets |
 | **Settings** | Configure session path, Dobby mode, and theme |
@@ -44,7 +46,7 @@ The filter panel lets you narrow down sessions before grouping:
 - **Branch** — comma-separated branch names; matches any session on a matching branch (e.g. `main,dev,feature`)
 - **Min/Max turns** — filter by conversation length
 - **Checkpoints** — show only sessions with/without checkpoints
-- **Status** — running or completed
+- **Status** — Active (on disk) or Deleted
 - **Date range** — filter by creation date
 - **Hide deleted / Hide empty** — clean up the list
 
@@ -73,7 +75,7 @@ Setups save your current view, sort, and filter configuration as a reusable pres
 
 When viewing sessions grouped by folder, branch, or date, the group search bar (above the session list) filters which groups are visible.
 
-- Separate multiple patterns with `;` (semicolon) — matches any pattern (OR logic)
+- Separate multiple patterns with `,` (comma) — matches any pattern (OR logic)
 - Prefix a pattern with `/` to use regex (e.g. `/feature-.*`)
 - Matching is case-insensitive
 
@@ -89,6 +91,18 @@ npm run tauri dev
 ```bash
 npm run tauri build
 ```
+
+## Configuring Session Paths
+
+By default, chasm reads Copilot CLI sessions from `~/.copilot/session-state/`. If your sessions are stored elsewhere (e.g. older Copilot CLI versions used `~/.copilot/history-session-state/`), you can configure the path in **Settings → Copilot CLI Path**.
+
+Multiple paths can be specified **comma-separated**:
+
+```
+C:\Users\you\.copilot, C:\Users\you\.copilot-old
+```
+
+chasm will use the first valid path it finds. This is useful when migrating between Copilot CLI versions or when session data lives in non-default locations.
 
 ## Documentation
 

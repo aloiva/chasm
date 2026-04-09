@@ -1,6 +1,6 @@
 # chasm — features
 
-**c**entralised **h**ub for **a**gent **s**ession **m**anager
+**c**entralised **h**ub for **a**gent **s**ession **m**anagement
 
 A desktop app that aggregates AI coding sessions from multiple tools into a single, searchable interface.
 
@@ -62,7 +62,7 @@ Right-click any session card to access:
 ### group filter
 
 - Filter visible groups in real-time using the filter input
-- **Multiple patterns**: use semicolons to search for multiple terms (e.g., `dobby;project-x` shows groups matching either)
+- **Multiple patterns**: use commas to search for multiple terms (e.g., `dobby,project-x` shows groups matching either)
 - **Regex support**: wrap a pattern in `/regex/flags` for regex matching (e.g., `/^C:\\projects/i`)
 - Invalid regex gracefully falls back to plain text search
 - Combines with view mode — e.g., filter folder groups while in folder view
@@ -115,7 +115,7 @@ The panel auto-refreshes when:
 Access settings via the ⚙️ gear icon in the toolbar:
 
 - **Enable Dobby** — toggle Dobby adapter (experimental, for Dobby agent sessions)
-- **Copilot CLI Path** — override the default `~/.copilot` directory with a custom path; validates that the path exists before applying; persists across restarts
+- **Copilot CLI Path** — override the default `~/.copilot` directory with a custom path (comma-separated for multiple paths, e.g. `~/.copilot, ~/.copilot-old`); validates that the path exists before applying; uses the first valid path; persists across restarts
 - **Reindex** (experimental) — triggers `/chronicle reindex` to rebuild the Copilot CLI session index, useful when deleted sessions still appear
 
 ---

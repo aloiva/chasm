@@ -112,7 +112,7 @@
         <input
           type="text"
           class="path-input"
-          placeholder="~/.copilot"
+          placeholder="~/.copilot, ~/.copilot/history"
           bind:value={copilotPath}
           onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveCopilotPath(); }}
         />

@@ -130,7 +130,8 @@
           }}
         >
           <option value="any">Any</option>
-          <option value="recent">Recent (active)</option>
+          <option value="active">Active</option>
+          <option value="deleted">Deleted</option>
         </select>
       </div>
 
