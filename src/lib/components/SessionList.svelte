@@ -6,6 +6,7 @@
     filteredSessions,
     viewMode,
     collapsedGroups,
+    defaultCollapsed,
     selectedGroupKey,
     groupFilter,
     selectGroup,
@@ -33,11 +34,20 @@
 
   const groupKeys = $derived(Object.keys($filteredGroupedSessions));
 
+  // Auto-collapse new groups when defaultCollapsed is on
+  $effect(() => {
+    if ($defaultCollapsed) {
+      collapsedGroups.set(new Set(groupKeys));
+    }
+  });
+
   function collapseAll() {
+    defaultCollapsed.set(true);
     collapsedGroups.set(new Set(groupKeys));
   }
 
   function expandAll() {
+    defaultCollapsed.set(false);
     collapsedGroups.set(new Set());
   }
 </script>

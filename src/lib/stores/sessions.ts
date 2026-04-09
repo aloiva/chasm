@@ -44,8 +44,12 @@ export function isPinned(compositeId: string, pinned: Set<string>): boolean {
   return pinned.has(compositeId);
 }
 
+// Whether groups default to collapsed (persists across view changes)
+export const defaultCollapsed = writable(false);
+
 // Reset collapsed groups and group filter when view mode changes
 viewMode.subscribe(() => {
+  // Collapsed state is re-applied by SessionList when groups change
   collapsedGroups.set(new Set());
   groupFilter.set('');
 });

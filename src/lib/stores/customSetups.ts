@@ -4,6 +4,7 @@ import {
   sortBy,
   groupFilter,
   collapsedGroups,
+  defaultCollapsed,
   filters,
   groupedSessions,
   searchQuery,
@@ -106,8 +107,11 @@ export function applySetup(setup: CustomSetup) {
   filters.set({ ...config.filters });
 
   if (config.collapseAll) {
+    defaultCollapsed.set(true);
     const groups = get(groupedSessions);
     collapsedGroups.set(new Set(Object.keys(groups)));
+  } else {
+    defaultCollapsed.set(false);
   }
 
   activeSetupId.set(setup.id);
@@ -119,8 +123,7 @@ export function saveCurrentAsSetup(name: string): CustomSetup {
 
   const groups = get(groupedSessions);
   const allKeys = Object.keys(groups);
-  const collapsed = get(collapsedGroups);
-  const collapseAll = allKeys.length > 0 && allKeys.every((k) => collapsed.has(k));
+  const collapseAll = get(defaultCollapsed);
 
   const setup: CustomSetup = {
     id,
@@ -174,5 +177,6 @@ export function clearActiveSetup() {
   searchQuery.set('');
   groupFilter.set('');
   collapsedGroups.set(new Set());
+  defaultCollapsed.set(false);
   filters.set({ ...defaultFilters });
 }
