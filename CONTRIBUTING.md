@@ -56,6 +56,7 @@ These rules are **mandatory** for all contributors (including AI agents).
 
 ## 9. Documentation
 
+- Update `docs/FEATURES.md` when adding or changing user-facing functionality.
 - Update `docs/DATA_SOURCES.md` when adding a new AI tool adapter.
 - Update `docs/ARCHITECTURE.md` when changing the adapter trait or data flow.
 - Update `docs/DECISIONS.md` when making a non-trivial design choice.
