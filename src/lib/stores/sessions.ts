@@ -263,7 +263,7 @@ export const groupedSessions = derived(
 );
 
 /** Apply groupFilter to groupedSessions — filters group keys.
- *  Supports comma-separated patterns with operators (startswith=, endswith=, not=, !, /regex/). */
+ *  Supports comma-separated patterns with operators (startswith=, endswith=, not=, !); , for OR, + for AND. */
 export const filteredGroupedSessions = derived(
   [groupedSessions, groupFilter],
   ([$groups, $filter]) => {

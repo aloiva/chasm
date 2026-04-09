@@ -19,7 +19,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 | Button | What it does |
 |--------|-------------|
-| **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`, `/regex/` |
+| **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`. Use `,` for OR, `+` for AND |
 | **View** | Switch grouping: Source, Folder, Branch, Date |
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
@@ -56,16 +56,15 @@ chasm has two search inputs — **session search** and **group search** — each
 
 Searches across all session metadata: title, session ID, folder path, branch, source, and summary. Any detail about a session can be matched.
 
-- Multiple terms separated by `,` (comma) — matches any term (OR logic)
+- Multiple terms separated by `,` (comma) — matches any term (**OR** logic)
+- Terms joined by `+` (plus) — all must match (**AND** logic within the group)
+- Combined: `A+B,C` = (A AND B) OR C
 - **Search operators** (default is `contains` when no operator is specified):
   - `startswith=value` — matches sessions where any field starts with value
   - `endswith=value` — matches sessions where any field ends with value
   - `contains=value` — explicit contains (same as plain text)
   - `not=value` or `!value` — excludes sessions containing value
-  - `/regex/flags` — regex matching (e.g. `/feat-\d+/i`)
   - `plain text` — default contains (substring match)
-
-**Testing regex**: type `/pattern/flags` in any search input. For example, `/^fix/i` matches sessions starting with "fix". Invalid regex gracefully falls back to plain text.
 
 ### Group Search (above session list)
 
@@ -76,7 +75,7 @@ Filters which **groups** are visible based on the group label text in the curren
 - In **Source view** → searches source names (e.g. "Copilot CLI")
 - In **Date view** → searches date bucket labels
 
-Same operators as session search: `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `/regex/`.
+Same operators and combinators as session search: `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `,` for OR, `+` for AND.
 
 ## Setups
 
@@ -91,7 +90,7 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 | **Above, but only release branches** | view: Branch, filter folder: `C:\repopath1,C:\duplicaterepopath2`, group search: `release/` | Same as above, filtered to release branches |
 | **Only Copilot CLI sessions** | view: Source, group search: `Copilot CLI` | Hide VS Code and other sources (built-in setup) |
 | **Only VS Code sessions** | view: Source, group search: `VS Code Copilot` | Hide Copilot CLI sessions (built-in setup) |
-| **Dobby agent sessions** | view: Folder, group search: `startswith=C:\dobby\agents,endswith=_agent-cli` | Dobby agent folders only (built-in setup) |
+| **Dobby agent sessions** | view: Folder, group search: `startswith=C:\dobby\agents+endswith=_agent-cli` | Dobby agent folders only (built-in setup) |
 | **Active meaningful work** | view: Source, filter branch: `main,dev`, filter min turns: 3 | Find real work on key branches |
 | **Recent long sessions** | view: Date, filter min turns: 10, filter date: last 7 days | Review substantial recent sessions |
 
@@ -101,7 +100,7 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 |-----------|------|------|--------|----------------|--------------|
 | `Copilot CLI Sessions` (built-in) | Source | — | — | — | `Copilot CLI` |
 | `VS Code Chat Sessions` (built-in) | Source | — | — | — | `VS Code Copilot` |
-| `Dobby` (built-in) | Folder | Modified | — | — | `startswith=C:\dobby\agents,endswith=_agent-cli` |
+| `Dobby` (built-in) | Folder | Modified | — | — | `startswith=C:\dobby\agents+endswith=_agent-cli` |
 
 ### How to use
 
@@ -115,8 +114,8 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 
 The filter panel lets you narrow down sessions before grouping:
 
-- **Folder** — comma-separated; supports operators (`startswith=`, `endswith=`, `not=`/`!`, `/regex/`, or plain text for contains)
-- **Branch** — comma-separated; supports same operators as folder
+- **Folder** — supports operators (`startswith=`, `endswith=`, `not=`/`!`, or plain text); `,` for OR, `+` for AND
+- **Branch** — same operators and combinators as folder
 - **Min/Max turns** — filter by conversation length
 - **Checkpoints** — show only sessions with/without checkpoints
 - **Status** — Active (on disk) or Deleted

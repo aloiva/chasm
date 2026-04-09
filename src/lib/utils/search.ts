@@ -6,10 +6,14 @@
  *   endswith=value     — matches if text ends with value
  *   contains=value     — matches if text contains value (explicit)
  *   not=value  or !value — matches if text does NOT contain value
- *   /regex/flags       — matches via regex
  *   plain text          — default: contains (substring match)
  *
- * Multiple terms are comma-separated; OR logic across terms.
+ * Combinators:
+ *   ,  (comma) — OR logic across groups
+ *   +  (plus)  — AND logic within a group
+ *
+ * Example: startswith=C:\foo+endswith=bar,baz
+ *   → (starts with C:\foo AND ends with bar) OR (contains baz)
  */
 
 export type Matcher = (text: string) => boolean;
@@ -18,17 +22,6 @@ export type Matcher = (text: string) => boolean;
 function parseTerm(raw: string): Matcher {
   const term = raw.trim();
   if (!term) return () => true;
-
-  // Regex: /pattern/flags
-  const rxMatch = term.match(/^\/(.+)\/([gimsuy]*)$/);
-  if (rxMatch) {
-    try {
-      const rx = new RegExp(rxMatch[1], rxMatch[2] || 'i');
-      return (text) => rx.test(text);
-    } catch {
-      // Invalid regex — fall through to contains
-    }
-  }
 
   // startswith=
   const sw = term.match(/^startswith=(.+)$/i);
@@ -64,20 +57,34 @@ function parseTerm(raw: string): Matcher {
 }
 
 /**
- * Parse a comma-separated search string into an array of Matchers.
+ * Parse a single OR-group (may contain + for AND) into one compound Matcher.
+ * If the group has no +, returns a single-term matcher.
+ * If the group has +, all sub-terms must match (AND logic).
+ */
+function parseGroup(group: string): Matcher {
+  const parts = group.split('+').map((t) => t.trim()).filter(Boolean);
+  if (parts.length === 0) return () => true;
+  if (parts.length === 1) return parseTerm(parts[0]);
+  const matchers = parts.map(parseTerm);
+  return (text) => matchers.every((m) => m(text));
+}
+
+/**
+ * Parse a search string into an array of Matchers.
+ * Comma = OR across groups, + = AND within a group.
  * Returns empty array if input is blank.
  */
 export function parseSearchTerms(input: string): Matcher[] {
   if (!input.trim()) return [];
   return input
     .split(',')
-    .map((t) => t.trim())
+    .map((g) => g.trim())
     .filter(Boolean)
-    .map(parseTerm);
+    .map(parseGroup);
 }
 
 /**
- * Test if any matcher matches the given text (OR logic).
+ * Test if any matcher matches the given text (OR logic across groups).
  * Returns true if matchers is empty (no filter = match all).
  */
 export function matchesAny(matchers: Matcher[], text: string): boolean {

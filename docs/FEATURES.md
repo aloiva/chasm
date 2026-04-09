@@ -48,13 +48,14 @@ Right-click any session card to access:
 ### session search
 
 - Real-time text search across all session metadata: title, session ID, folder path, branch, source, and summary. Any detail about a session can be matched.
-- Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`)
+- Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`) — **OR** logic across terms
+- Use `+` to combine terms with **AND** logic (e.g., `startswith=feat+endswith=fix` matches both)
+- Combined: `A+B,C` = (A AND B) OR C
 - **Search operators** (default is `contains` when no operator is specified):
   - `startswith=value` — matches sessions where any field starts with value
   - `endswith=value` — matches sessions where any field ends with value
   - `contains=value` — explicit contains (same as plain text)
   - `not=value` or `!value` — excludes sessions containing value
-  - `/regex/flags` — regex matching (e.g. `/feat-\d+/i`). To test: type `/pattern/` in any search input. Invalid regex falls back to plain text.
   - `plain text` — default contains (substring match)
 - Debounced input to avoid excessive re-renders
 
@@ -76,11 +77,10 @@ Right-click any session card to access:
   - In **Branch view** → searches branch names
   - In **Source view** → searches source names (e.g. "Copilot CLI")
   - In **Date view** → searches date bucket labels
-- **Search operators** (same as session search): `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `/regex/`
+- **Search operators** (same as session search): `startswith=`, `endswith=`, `contains=`, `not=`/`!`
+- **Combinators**: `,` for OR, `+` for AND (e.g., `startswith=feat+!test` matches groups starting with "feat" that don't contain "test")
 - Default (no operator) is `contains` — case-insensitive substring match
-- **Multiple patterns**: use commas to search for multiple terms (e.g., `startswith=feat,!test` shows groups starting with "feat" but not containing "test")
-- **Regex support**: wrap a pattern in `/regex/flags` for regex matching (e.g., `/^C:\\projects/i`)
-- Invalid regex gracefully falls back to plain text search
+- **Multiple patterns**: use commas for OR (e.g., `startswith=feat,!test` shows groups starting with "feat" OR not containing "test"), use `+` for AND
 - Combines with view mode — e.g., filter folder groups while in folder view
 
 ### grouping
@@ -151,7 +151,7 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 | Above, only release branches | Branch | folder: `C:\repopath1,C:\duplicaterepopath2` | — | `release/` |
 | Only Copilot CLI sessions | Source | — | — | `Copilot CLI` |
 | Only VS Code sessions | Source | — | — | `VS Code Copilot` |
-| Dobby agent sessions | Folder | — | — | `startswith=C:\dobby\agents,endswith=_agent-cli` |
+| Dobby agent sessions | Folder | — | — | `startswith=C:\dobby\agents+endswith=_agent-cli` |
 | Active meaningful work | Source | branch: `main,dev`, min turns: 3 | — | — |
 | Recent long sessions | Date | min turns: 10, date: last 7 days | — | — |
 
@@ -161,7 +161,7 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 |-------|------|------|--------|----------------|--------------|
 | Copilot CLI Sessions | Source | — | — | — | `Copilot CLI` |
 | VS Code Chat Sessions | Source | — | — | — | `VS Code Copilot` |
-| Dobby | Folder | Modified | — | — | `startswith=C:\dobby\agents,endswith=_agent-cli` |
+| Dobby | Folder | Modified | — | — | `startswith=C:\dobby\agents+endswith=_agent-cli` |
 
 ### how to create
 

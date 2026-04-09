@@ -50,7 +50,7 @@
       <input
         type="text"
         class="group-filter"
-        placeholder="Search in groups.. (ex. repo1,!test,startswith=feat,endswith=cli)"
+        placeholder="Search in groups.. (ex. repo1,!test,startswith=feat+endswith=cli)"
         bind:value={$groupFilter}
       />
       {#if $groupFilter}

@@ -24,7 +24,7 @@
     <input
       type="text"
       class="search"
-      placeholder="Search in sessions.. (ex. repo1,!deleted,startswith=feat)"
+      placeholder="Search in sessions.. (ex. repo1,!deleted,startswith=feat+endswith=fix)"
       bind:value={$searchQuery}
     />
     {#if $searchQuery}
