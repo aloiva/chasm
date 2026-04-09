@@ -2,14 +2,16 @@
   import type { SessionSummary } from '$lib/types/session';
   import SourceBadge from './SourceBadge.svelte';
   import { formatDate, formatDateRange, truncate } from '$lib/utils/format';
-  import { selectedSessionId } from '$lib/stores/sessions';
+  import { selectedSessionId, selectSession, pinnedSessions } from '$lib/stores/sessions';
 
   let { session, oncontextmenu }: {
     session: SessionSummary;
     oncontextmenu?: (e: MouseEvent, session: SessionSummary) => void;
   } = $props();
 
-  const isActive = $derived($selectedSessionId === session.id);
+  const compositeId = $derived(session.id + ':' + session.source);
+  const isActive = $derived($selectedSessionId === compositeId);
+  const isPinned = $derived($pinnedSessions.has(compositeId));
   const displayTitle = $derived(
     session.title ?? truncate(session.first_message, 60) ?? '(unnamed session)'
   );
@@ -24,12 +26,15 @@
   class="card"
   class:active={isActive}
   class:deleted={!session.exists_on_disk}
-  onclick={() => selectedSessionId.set(session.id + ':' + session.source)}
+  onclick={() => selectSession(compositeId)}
   oncontextmenu={handleContextMenu}
 >
   <SourceBadge source={session.source} />
   <div class="body">
     <div class="title">
+      {#if isPinned}
+        <span class="pin-icon" title="Pinned">📌</span>
+      {/if}
       {#if session.status === 'recent'}
         <span class="status-dot" title="Recently active"></span>
       {/if}
@@ -102,6 +107,10 @@
     flex-shrink: 0;
     box-shadow: 0 0 4px var(--accent-green);
   }
+  .pin-icon {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
   .meta {
     font-size: var(--font-size-small);
     color: var(--text-muted);
@@ -122,7 +131,7 @@
   .right { text-align: right; flex-shrink: 0; }
   .turns { font-size: var(--font-size-small); color: var(--text-muted); }
   .ckpt { color: var(--accent-yellow); }
-  .date { font-size: 10px; color: var(--border); margin-top: 2px; }
+  .date { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
   .deleted-badge {
     font-size: 9px;
     color: var(--accent-red);

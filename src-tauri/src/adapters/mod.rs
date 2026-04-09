@@ -74,7 +74,7 @@ pub struct SessionDetail {
 #[serde(tag = "type")]
 pub enum ResumeAction {
     /// Spawn a terminal process (e.g., pwsh with copilot resume)
-    SpawnTerminal { command: String, args: Vec<String> },
+    SpawnTerminal { command: String, args: Vec<String>, cwd: Option<String> },
     /// Open an application (e.g., VS Code with folder)
     OpenApplication { command: String, args: Vec<String> },
     /// Not supported for this source

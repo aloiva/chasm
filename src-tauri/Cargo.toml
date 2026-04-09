@@ -1,12 +1,12 @@
 [package]
-name = "session-hub"
+name = "chasm"
 version = "0.1.0"
-description = "AI Session Manager - unified viewer for Copilot CLI and VS Code Copilot Chat sessions"
+description = "CHASM - Centralised Hub for Agent Session Manager"
 authors = ["aloiva"]
 edition = "2021"
 
 [lib]
-name = "session_hub_lib"
+name = "chasm_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

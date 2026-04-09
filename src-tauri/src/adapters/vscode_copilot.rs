@@ -69,6 +69,7 @@ impl VsCodeCopilotSource {
             _ => return Ok(Vec::new()),
         };
 
+        // Collect session IDs first, then batch-read turn counts
         let mut sessions = Vec::new();
         for (_key, entry) in entries {
             let session_id = entry
@@ -100,15 +101,33 @@ impl VsCodeCopilotSource {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
+            // Try to get actual turn count from session data
+            let turn_count = Self::count_session_turns(&conn, &session_id)
+                .unwrap_or(if is_empty { 0 } else { 1 });
+
             sessions.push(VsCodeSession {
                 session_id,
                 title,
                 last_message_date: last_date,
                 is_empty,
+                turn_count,
             });
         }
 
         Ok(sessions)
+    }
+
+    /// Count the number of turns in a VS Code chat session by reading session data.
+    fn count_session_turns(conn: &Connection, session_id: &str) -> Option<u32> {
+        // VS Code stores session data under keys like "interactive.sessions.<id>"
+        let session_key = format!("interactive.sessions.{}", session_id);
+        let mut stmt = conn
+            .prepare("SELECT value FROM ItemTable WHERE key = ?1")
+            .ok()?;
+        let json_str: String = stmt.query_row([&session_key], |row| row.get(0)).ok()?;
+        let data: serde_json::Value = serde_json::from_str(&json_str).ok()?;
+        let requests = data.get("requests")?.as_array()?;
+        Some(requests.len() as u32)
     }
 }
 
@@ -118,6 +137,7 @@ struct VsCodeSession {
     title: Option<String>,
     last_message_date: Option<String>,
     is_empty: bool,
+    turn_count: u32,
 }
 
 /// Decode VS Code folder URI to a native path.
@@ -211,8 +231,6 @@ impl SessionSource for VsCodeCopilotSource {
             };
 
             for session in sessions {
-                let turn_count = if session.is_empty { 0 } else { 1 }; // We can't know exact count without deep parsing
-
                 let mut extra = HashMap::new();
                 extra.insert("workspace_hash".to_string(), ws_hash.clone());
                 if let Some(ref f) = folder {
@@ -223,12 +241,12 @@ impl SessionSource for VsCodeCopilotSource {
                     id: session.session_id,
                     source: self.name().to_string(),
                     title: session.title,
-                    turn_count,
+                    turn_count: session.turn_count,
                     cwd: folder.clone(),
                     branch: None,
                     created_at: session.last_message_date.clone(),
                     updated_at: session.last_message_date.clone(),
-                    first_message: None, // Would need deeper DB parsing
+                    first_message: None,
                     size_bytes: None,
                     has_checkpoints: false,
                     exists_on_disk: true,
@@ -323,9 +341,12 @@ impl SessionSource for VsCodeCopilotSource {
             .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
 
         if let Some(folder) = session.extra.get("workspace_folder") {
+            // Open VS Code to the workspace folder.
+            // VS Code doesn't expose a CLI/URI to open a specific Copilot Chat session,
+            // so the best we can do is open the workspace where the chat occurred.
             Ok(ResumeAction::OpenApplication {
                 command: "code".to_string(),
-                args: vec!["--folder-uri".to_string(), format!("file:///{}", folder.replace('\\', "/"))],
+                args: vec![folder.clone()],
             })
         } else {
             Err(SourceError::Warning(

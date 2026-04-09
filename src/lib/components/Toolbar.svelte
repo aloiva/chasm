@@ -5,6 +5,8 @@
   import SourceFilter from './SourceFilter.svelte';
   import ViewSelector from './ViewSelector.svelte';
   import FilterPanel from './FilterPanel.svelte';
+  import CustomSetupSelector from './CustomSetupSelector.svelte';
+  import SettingsPanel from './SettingsPanel.svelte';
   import type { SourceInfo } from '$lib/types/session';
   import { onMount } from 'svelte';
 
@@ -53,6 +55,8 @@
     <option value="branch">Sort: Branch</option>
   </select>
   <FilterPanel />
+  <CustomSetupSelector />
+  <SettingsPanel />
   <button class="scan-btn" onclick={scan} disabled={$loading}>
     {$loading ? '...' : '⟳ Scan'}
   </button>

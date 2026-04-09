@@ -1,4 +1,6 @@
-# Session Hub
+# CHASM
+
+**C**entralised **H**ub for **A**gent **S**ession **M**anager
 
 A lightweight desktop app for managing AI coding sessions across multiple tools.
 

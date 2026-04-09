@@ -34,39 +34,6 @@
       </div>
 
       <div class="filter-group">
-        <label class="filter-label">Folder starts with</label>
-        <input
-          type="text"
-          class="filter-input"
-          placeholder="e.g. C:\projects"
-          value={$filters.folderStartsWith}
-          oninput={(e: Event) => updateFilter('folderStartsWith', (e.target as HTMLInputElement).value)}
-        />
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label">Folder contains</label>
-        <input
-          type="text"
-          class="filter-input"
-          placeholder="e.g. my-app"
-          value={$filters.folderContains}
-          oninput={(e: Event) => updateFilter('folderContains', (e.target as HTMLInputElement).value)}
-        />
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label">Branch</label>
-        <input
-          type="text"
-          class="filter-input"
-          placeholder="e.g. main"
-          value={$filters.branch}
-          oninput={(e: Event) => updateFilter('branch', (e.target as HTMLInputElement).value)}
-        />
-      </div>
-
-      <div class="filter-group">
         <label class="filter-label">Min turns</label>
         <input
           type="number"
@@ -111,28 +78,22 @@
       </div>
 
       <div class="filter-row">
-        <label class="filter-label">On disk</label>
-        <select
-          class="filter-select"
-          value={$filters.existsOnDisk === null ? 'any' : $filters.existsOnDisk ? 'yes' : 'no'}
-          onchange={(e: Event) => {
-            const v = (e.target as HTMLSelectElement).value;
-            updateFilter('existsOnDisk', v === 'any' ? null : v === 'yes');
-          }}
-        >
-          <option value="any">Any</option>
-          <option value="yes">Exists</option>
-          <option value="no">Deleted</option>
-        </select>
-      </div>
-
-      <div class="filter-row">
         <label class="filter-label">Hide deleted</label>
         <input
           type="checkbox"
           class="filter-checkbox"
           checked={$filters.hideDeleted}
           onchange={() => updateFilter('hideDeleted', !$filters.hideDeleted)}
+        />
+      </div>
+
+      <div class="filter-row">
+        <label class="filter-label">Hide empty</label>
+        <input
+          type="checkbox"
+          class="filter-checkbox"
+          checked={$filters.hideEmpty}
+          onchange={() => updateFilter('hideEmpty', !$filters.hideEmpty)}
         />
       </div>
 

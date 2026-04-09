@@ -87,20 +87,82 @@ fn resume_session(
     let action = adapter.resume(&id).map_err(|e| e.to_string())?;
 
     match action {
-        ResumeAction::SpawnTerminal { command, args } => {
-            let mut cmd = StdCommand::new(&command);
-            cmd.args(&args);
+        ResumeAction::SpawnTerminal { command, args, cwd } => {
+            // Use PowerShell's Start-Process to launch a fully interactive terminal.
+            // Direct spawning from a GUI app (Tauri) leaves stdin piped to the parent,
+            // making the terminal non-interactive. cmd /c start has quoting issues with
+            // Rust's MSVCRT arg encoding. Start-Process avoids both problems.
             #[cfg(windows)]
-            cmd.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
-            cmd.spawn()
-                .map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+            {
+                let escaped_args: Vec<String> = args.iter()
+                    .map(|a| format!("'{}'", a.replace("'", "''")))
+                    .collect();
+                let arg_list = escaped_args.join(", ");
+
+                let mut ps_cmd = format!(
+                    "Start-Process -FilePath '{}'",
+                    command.replace("'", "''")
+                );
+                if let Some(ref dir) = cwd {
+                    ps_cmd.push_str(&format!(
+                        " -WorkingDirectory '{}'",
+                        dir.replace("'", "''")
+                    ));
+                }
+                ps_cmd.push_str(&format!(" -ArgumentList @({})", arg_list));
+
+                StdCommand::new("pwsh")
+                    .args(["-NoProfile", "-Command", &ps_cmd])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW for launcher
+                    .spawn()
+                    .map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+            }
+            #[cfg(not(windows))]
+            {
+                let mut cmd = StdCommand::new(&command);
+                cmd.args(&args);
+                if let Some(ref dir) = cwd {
+                    cmd.current_dir(dir);
+                }
+                cmd.spawn()
+                    .map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+            }
             Ok(format!("Spawned terminal: {} {:?}", command, args))
         }
         ResumeAction::OpenApplication { command, args } => {
-            StdCommand::new(&command)
-                .args(&args)
-                .spawn()
-                .map_err(|e| format!("Failed to open application: {}", e))?;
+            // On Windows, apps like "code" are actually .cmd scripts (code.cmd).
+            // Rust's Command::new can find them via PATHEXT but they must run through
+            // cmd.exe. Use Start-Process for reliability and to hide the launcher window.
+            #[cfg(windows)]
+            {
+                let escaped_args: Vec<String> = args.iter()
+                    .map(|a| format!("'{}'", a.replace("'", "''")))
+                    .collect();
+                let arg_list = escaped_args.join(", ");
+
+                let ps_cmd = if args.is_empty() {
+                    format!("Start-Process -FilePath '{}'", command.replace("'", "''"))
+                } else {
+                    format!(
+                        "Start-Process -FilePath '{}' -ArgumentList @({})",
+                        command.replace("'", "''"),
+                        arg_list
+                    )
+                };
+
+                StdCommand::new("pwsh")
+                    .args(["-NoProfile", "-Command", &ps_cmd])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                    .spawn()
+                    .map_err(|e| format!("Failed to open application: {}", e))?;
+            }
+            #[cfg(not(windows))]
+            {
+                StdCommand::new(&command)
+                    .args(&args)
+                    .spawn()
+                    .map_err(|e| format!("Failed to open application: {}", e))?;
+            }
             Ok(format!("Opened application: {} {:?}", command, args))
         }
         ResumeAction::NotSupported { reason } => Err(reason),
@@ -131,6 +193,91 @@ fn open_folder(path: String) -> Result<(), String> {
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     Ok(())
+}
+
+/// Run `/chronicle reindex` inside a Copilot CLI session to rebuild the session index.
+/// This removes stale entries (e.g. deleted sessions) from session-store.db.
+#[tauri::command]
+fn reindex_sessions() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        // Use Start-Process to launch a fully interactive terminal
+        let ps_cmd = r#"Start-Process -FilePath 'pwsh' -ArgumentList @('-NoExit', '-Command', 'copilot -i ''/chronicle reindex''')"#;
+        StdCommand::new("pwsh")
+            .args(["-NoProfile", "-Command", ps_cmd])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW for launcher
+            .spawn()
+            .map_err(|e| format!("Failed to spawn reindex terminal: {}", e))?;
+    }
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
+        StdCommand::new(&shell)
+            .args(["-c", "copilot -i '/chronicle reindex'"])
+            .spawn()
+            .map_err(|e| format!("Failed to spawn reindex terminal: {}", e))?;
+    }
+    Ok("Reindex started".to_string())
+}
+
+/// Spawn a new session terminal in a given path.
+/// `session_type` is "cli" (Copilot CLI) or "dobby".
+/// If `path` is empty, defaults to the current user's home directory.
+#[tauri::command]
+fn new_session(path: String, session_type: String) -> Result<String, String> {
+    let mut work_dir = if path.is_empty() {
+        dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string())
+    } else {
+        path.clone()
+    };
+
+    let launch_cmd = match session_type.as_str() {
+        "cli" => "copilot".to_string(),
+        "dobby" => {
+            if !work_dir.to_lowercase().starts_with("c:\\dobby\\agents") {
+                return Err(
+                    "Dobby sessions can only be started in paths under C:\\dobby\\agents"
+                        .to_string(),
+                );
+            }
+            // Start-Copilot.ps1 lives one level above the agent folder
+            let parent = std::path::Path::new(&work_dir)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| work_dir.clone());
+            work_dir = parent;
+            ".\\Start-Copilot.ps1".to_string()
+        }
+        other => return Err(format!("Unknown session type: {}", other)),
+    };
+
+    #[cfg(windows)]
+    {
+        // Use Start-Process to launch a fully interactive terminal
+        let escaped_cmd = launch_cmd.replace("'", "''");
+        let ps_cmd = format!(
+            "Start-Process -FilePath 'pwsh' -WorkingDirectory '{}' -ArgumentList @('-NoExit', '-Command', '{}')",
+            work_dir.replace("'", "''"),
+            escaped_cmd
+        );
+        StdCommand::new("pwsh")
+            .args(["-NoProfile", "-Command", &ps_cmd])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW for launcher
+            .spawn()
+            .map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+    }
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
+        let mut cmd = StdCommand::new(&shell);
+        cmd.args(["-c", &launch_cmd]);
+        cmd.current_dir(&work_dir);
+        cmd.spawn()
+            .map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+    }
+    Ok(format!("Started {} session in {}", session_type, work_dir))
 }
 
 #[tauri::command]
@@ -213,7 +360,9 @@ pub fn run() {
             delete_sessions,
             resume_session,
             open_folder,
+            new_session,
             get_available_sources,
+            reindex_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

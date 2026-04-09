@@ -345,10 +345,7 @@ impl SessionSource for CopilotCliSource {
 
     fn resume(&self, id: &str) -> Result<ResumeAction, SourceError> {
         let cwd = self.get_session_cwd(id);
-        let resume_cmd = match cwd {
-            Some(dir) => format!("cd '{}'; copilot -i 'resume {}'", dir, id),
-            None => format!("copilot -i 'resume {}'", id),
-        };
+        let resume_cmd = format!("copilot --resume={}", id);
 
         #[cfg(windows)]
         {
@@ -359,6 +356,7 @@ impl SessionSource for CopilotCliSource {
                     "-Command".to_string(),
                     resume_cmd,
                 ],
+                cwd,
             })
         }
         #[cfg(not(windows))]
@@ -367,11 +365,15 @@ impl SessionSource for CopilotCliSource {
             Ok(ResumeAction::SpawnTerminal {
                 command: shell,
                 args: vec!["-c".to_string(), resume_cmd],
+                cwd,
             })
         }
     }
 
     fn watch_paths(&self) -> Vec<PathBuf> {
-        vec![self.session_state_dir()]
+        // Watch session-state directory (folder changes, workspace.yaml, deletions)
+        // AND session-store.db directly (turn count updates, new sessions).
+        // The DB file lives in the parent copilot_dir, not under session-state/.
+        vec![self.session_state_dir(), self.db_path()]
     }
 }

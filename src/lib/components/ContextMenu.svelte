@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SessionSummary } from '$lib/types/session';
+  import { pinnedSessions } from '$lib/stores/sessions';
 
   let {
     session,
@@ -12,6 +13,7 @@
     onpreview,
     oncopyid,
     onopenfiles,
+    onpin,
   }: {
     session: SessionSummary;
     x: number;
@@ -23,6 +25,7 @@
     onpreview: (session: SessionSummary) => void;
     oncopyid: (session: SessionSummary) => void;
     onopenfiles: (session: SessionSummary) => void;
+    onpin: (session: SessionSummary) => void;
   } = $props();
 
   // Clamp menu position so it doesn't overflow the viewport
@@ -33,6 +36,7 @@
 
   const isReadOnly = $derived(session.source === 'vscode-copilot');
   const isDeleted = $derived(!session.exists_on_disk);
+  const sessionPinned = $derived($pinnedSessions.has(session.id + ':' + session.source));
 
   function handleAction(action: () => void) {
     action();
@@ -51,6 +55,10 @@
   >
     <button class="menu-item" onclick={() => handleAction(() => onpreview(session))}>
       <span class="icon">👁</span> Preview
+    </button>
+
+    <button class="menu-item" onclick={() => handleAction(() => onpin(session))}>
+      <span class="icon">{sessionPinned ? '📌' : '📍'}</span> {sessionPinned ? 'Unpin' : 'Pin to Top'}
     </button>
 
     <button class="menu-item" onclick={() => handleAction(() => oncopyid(session))}>

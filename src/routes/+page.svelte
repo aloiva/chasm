@@ -5,11 +5,14 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
   import SessionDetail from '$lib/components/SessionDetail.svelte';
+  import GroupDetail from '$lib/components/GroupDetail.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
-  import { sessions, loading, selectedSessionId } from '$lib/stores/sessions';
+  import GroupContextMenu from '$lib/components/GroupContextMenu.svelte';
+  import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin } from '$lib/stores/sessions';
   import type { SessionSummary } from '$lib/types/session';
 
   let contextMenu = $state<{ session: SessionSummary; x: number; y: number } | null>(null);
+  let groupContextMenu = $state<{ key: string; x: number; y: number } | null>(null);
   let renameTarget = $state<SessionSummary | null>(null);
   let renameValue = $state('');
   let deleteConfirm = $state<SessionSummary | null>(null);
@@ -49,6 +52,14 @@
       console.error('Scan failed:', e);
     } finally {
       loading.set(false);
+      refreshCounter.update(n => n + 1);
+    }
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (e.ctrlKey && e.key === 'r') {
+      e.preventDefault();
+      scanSessions();
     }
   }
 
@@ -59,13 +70,16 @@
     unlisten = await listen('sessions-changed', () => {
       scanSessions();
     });
+
+    window.addEventListener('keydown', handleGlobalKeydown);
   });
 
   onDestroy(() => {
     unlisten?.();
+    window.removeEventListener('keydown', handleGlobalKeydown);
   });
 
-  const showDetail = $derived($selectedSessionId !== null);
+  const showDetail = $derived($selectedSessionId !== null || $selectedGroupKey !== null);
 
   function openContextMenu(e: MouseEvent, session: SessionSummary) {
     contextMenu = { session, x: e.clientX, y: e.clientY };
@@ -75,8 +89,20 @@
     contextMenu = null;
   }
 
+  function openGroupContextMenu(e: MouseEvent, key: string) {
+    groupContextMenu = { key, x: e.clientX, y: e.clientY };
+  }
+
+  function closeGroupContextMenu() {
+    groupContextMenu = null;
+  }
+
   function handlePreview(session: SessionSummary) {
-    selectedSessionId.set(session.id + ':' + session.source);
+    selectSession(session.id + ':' + session.source);
+  }
+
+  function handlePin(session: SessionSummary) {
+    togglePin(session.id + ':' + session.source);
   }
 
   async function handleCopyId(session: SessionSummary) {
@@ -183,13 +209,17 @@
   <Toolbar />
   <div class="content" class:resizing={isResizing}>
     <div class="sidebar" class:collapsed={showDetail} style={showDetail ? `width:${sidebarWidth}px;min-width:${sidebarWidth}px` : ''}>
-      <SessionList oncontextmenu={openContextMenu} />
+      <SessionList oncontextmenu={openContextMenu} ongroupcontextmenu={openGroupContextMenu} />
     </div>
     {#if showDetail}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="resize-handle" onmousedown={onResizeStart}></div>
       <div class="detail-panel">
-        <SessionDetail />
+        {#if $selectedGroupKey}
+          <GroupDetail />
+        {:else}
+          <SessionDetail />
+        {/if}
       </div>
     {/if}
   </div>
@@ -202,11 +232,22 @@
     y={contextMenu.y}
     onclose={closeContextMenu}
     onpreview={handlePreview}
+    onpin={handlePin}
     oncopyid={handleCopyId}
     onopenfiles={handleOpenFiles}
     onresume={handleResume}
     onrename={handleRenameStart}
     ondelete={handleDeleteStart}
+  />
+{/if}
+
+{#if groupContextMenu}
+  <GroupContextMenu
+    groupKey={groupContextMenu.key}
+    x={groupContextMenu.x}
+    y={groupContextMenu.y}
+    onclose={closeGroupContextMenu}
+    onview={(key) => { selectGroup(key); closeGroupContextMenu(); }}
   />
 {/if}
 

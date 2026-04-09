@@ -3,15 +3,16 @@
   import SourceBadge from './SourceBadge.svelte';
   import { formatDate, formatDateRange } from '$lib/utils/format';
   import { invoke } from '@tauri-apps/api/core';
-  import { selectedSessionId } from '$lib/stores/sessions';
+  import { selectedSessionId, refreshCounter } from '$lib/stores/sessions';
 
   let detail = $state<SessionDetail | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
-  // React to selection changes
+  // React to selection changes and refreshes
   $effect(() => {
     const sel = $selectedSessionId;
+    const _rc = $refreshCounter; // trigger re-fetch on refresh
     if (!sel) { detail = null; return; }
     const [id, source] = sel.split(':');
     if (id && source) loadDetail(source, id);
@@ -78,45 +79,50 @@
 {:else if detail}
   <div class="detail">
     <div class="header">
-      <button class="back-btn" onclick={goBack}>← Back</button>
-      <div class="header-info">
-        <div class="header-title">
-          <SourceBadge source={detail.summary.source} size="md" />
-          <span class="title-text">{detail.summary.title ?? '(unnamed)'}</span>
-        </div>
-        <div class="header-meta">
-          <span
-            class="session-id"
-            title="Click to copy: {detail.summary.id}"
-            onclick={() => navigator.clipboard.writeText(detail.summary.id)}
-            role="button"
-            tabindex="0"
-            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') navigator.clipboard.writeText(detail.summary.id); }}
-          >🔑 {detail.summary.id.length > 24 ? detail.summary.id.slice(0, 24) + '…' : detail.summary.id}</span>
-          {#if detail.summary.cwd}
-            <span class="meta-item" title={detail.summary.cwd}>📁 {detail.summary.cwd}</span>
-          {/if}
-          {#if detail.summary.branch}
-            <span>🌿 {detail.summary.branch}</span>
-          {/if}
-          <span>💬 {detail.turns.length} turns</span>
-          {#if detail.checkpoints.length > 0}
-            <span>📌 {detail.checkpoints.length} checkpoints</span>
-          {/if}
-          <span>📅 {formatDateRange(detail.summary.created_at, detail.summary.updated_at)}</span>
-        </div>
-        {#if detail.files_touched.length > 0}
-          <div class="files-badge">{detail.files_touched.length} files touched</div>
-        {/if}
+      <div class="header-top-row">
+        <button class="back-btn" onclick={goBack}>← Back</button>
+        <button class="close-btn" onclick={goBack} title="Close panel">×</button>
       </div>
-      <div class="header-actions">
-        <button class="resume-btn" onclick={resumeSession}>▶ Resume</button>
-        {#if detail.summary.cwd}
-          <button class="open-files-btn" onclick={openFiles}>📂 Open Folder</button>
-        {/if}
-        {#if detail.summary.storage_path}
-          <button class="open-files-btn" onclick={openSessionFolder}>🗂 Session Folder</button>
-        {/if}
+      <div class="header-body">
+        <div class="header-info">
+          <div class="header-title">
+            <SourceBadge source={detail.summary.source} size="md" />
+            <span class="title-text">{detail.summary.title ?? '(unnamed)'}</span>
+          </div>
+          <div class="header-meta">
+            <span
+              class="session-id"
+              title="Click to copy: {detail.summary.id}"
+              onclick={() => navigator.clipboard.writeText(detail.summary.id)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') navigator.clipboard.writeText(detail.summary.id); }}
+            >🔑 {detail.summary.id.length > 24 ? detail.summary.id.slice(0, 24) + '…' : detail.summary.id}</span>
+            {#if detail.summary.cwd}
+              <span class="meta-item" title={detail.summary.cwd}>📁 {detail.summary.cwd}</span>
+            {/if}
+            {#if detail.summary.branch}
+              <span>🌿 {detail.summary.branch}</span>
+            {/if}
+            <span>💬 {detail.turns.length} turns</span>
+            {#if detail.checkpoints.length > 0}
+              <span>📌 {detail.checkpoints.length} checkpoints</span>
+            {/if}
+            <span>📅 {formatDateRange(detail.summary.created_at, detail.summary.updated_at)}</span>
+          </div>
+          {#if detail.files_touched.length > 0}
+            <div class="files-badge">{detail.files_touched.length} files touched</div>
+          {/if}
+        </div>
+        <div class="header-actions">
+          <button class="resume-btn" onclick={resumeSession}>▶ Resume</button>
+          {#if detail.summary.cwd}
+            <button class="open-files-btn" onclick={openFiles}>📂 Open Folder</button>
+          {/if}
+          {#if detail.summary.storage_path}
+            <button class="open-files-btn" onclick={openSessionFolder}>🗂 Session Folder</button>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -173,12 +179,11 @@
   .detail { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
   .header {
-    display: flex; align-items: flex-start; gap: 8px;
+    display: flex; flex-direction: column; gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
     flex-shrink: 0;
-    overflow: hidden;
   }
   .back-btn {
     padding: 4px 10px; border-radius: var(--radius);
@@ -187,6 +192,18 @@
     font-size: var(--font-size-small); flex-shrink: 0;
   }
   .back-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+  .header-top-row {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .close-btn {
+    background: none; border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 2px 8px;
+    line-height: 1; flex-shrink: 0;
+  }
+  .close-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+  .header-body {
+    display: flex; align-items: flex-start; gap: 8px;
+  }
   .header-info { flex: 1; min-width: 0; overflow: hidden; }
   .header-title {
     display: flex; align-items: center; gap: 8px;

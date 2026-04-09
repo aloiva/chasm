@@ -9,15 +9,64 @@ export const selectedSources = writable<Set<string>>(new Set());
 export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch'>('updated');
 export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
 export const selectedSessionId = writable<string | null>(null);
+export const selectedGroupKey = writable<string | null>(null);
+export const collapsedGroups = writable<Set<string>>(new Set());
+export const groupFilter = writable('');
+/** Bumped on every scan to trigger detail panel re-fetch */
+export const refreshCounter = writable(0);
+
+/* ── Pinned sessions (persisted to localStorage) ── */
+function loadPinned(): Set<string> {
+  try {
+    const raw = localStorage.getItem('chasm:pinned');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function savePinned(s: Set<string>) {
+  localStorage.setItem('chasm:pinned', JSON.stringify([...s]));
+}
+
+export const pinnedSessions = writable<Set<string>>(loadPinned());
+pinnedSessions.subscribe(savePinned);
+
+export function togglePin(compositeId: string) {
+  pinnedSessions.update(s => {
+    const next = new Set(s);
+    if (next.has(compositeId)) next.delete(compositeId);
+    else next.add(compositeId);
+    return next;
+  });
+}
+
+export function isPinned(compositeId: string, pinned: Set<string>): boolean {
+  return pinned.has(compositeId);
+}
+
+// Reset collapsed groups and group filter when view mode changes
+viewMode.subscribe(() => {
+  collapsedGroups.set(new Set());
+  groupFilter.set('');
+});
+
+/** Select a group — clears any selected session */
+export function selectGroup(key: string) {
+  selectedSessionId.set(null);
+  selectedGroupKey.set(key);
+}
+
+/** Select a session — clears any selected group */
+export function selectSession(compositeId: string) {
+  selectedGroupKey.set(null);
+  selectedSessionId.set(compositeId);
+}
 
 /** Advanced filters — all optional, applied cumulatively */
 export interface FilterState {
-  folderStartsWith: string;
-  folderContains: string;
-  branch: string;
   hasCheckpoints: boolean | null;
-  existsOnDisk: boolean | null;
   hideDeleted: boolean;
+  hideEmpty: boolean;
   status: string | null;
   minTurns: number | null;
   maxTurns: number | null;
@@ -25,13 +74,10 @@ export interface FilterState {
   dateTo: string;
 }
 
-const defaultFilters: FilterState = {
-  folderStartsWith: '',
-  folderContains: '',
-  branch: '',
+export const defaultFilters: FilterState = {
   hasCheckpoints: null,
-  existsOnDisk: null,
   hideDeleted: true,
+  hideEmpty: false,
   status: null,
   minTurns: null,
   maxTurns: null,
@@ -48,12 +94,9 @@ export function resetFilters() {
 /** Count active (non-default) filters */
 export const activeFilterCount = derived(filters, ($f) => {
   let count = 0;
-  if ($f.folderStartsWith) count++;
-  if ($f.folderContains) count++;
-  if ($f.branch) count++;
   if ($f.hasCheckpoints !== null) count++;
-  if ($f.existsOnDisk !== null) count++;
   if (!$f.hideDeleted) count++;
+  if ($f.hideEmpty) count++;
   if ($f.status !== null) count++;
   if ($f.minTurns !== null) count++;
   if ($f.maxTurns !== null) count++;
@@ -63,8 +106,8 @@ export const activeFilterCount = derived(filters, ($f) => {
 });
 
 export const filteredSessions = derived(
-  [sessions, searchQuery, selectedSources, sortBy, filters],
-  ([$sessions, $query, $sources, $sort, $filters]) => {
+  [sessions, searchQuery, selectedSources, sortBy, filters, pinnedSessions],
+  ([$sessions, $query, $sources, $sort, $filters, $pinned]) => {
     let result = $sessions;
 
     // Filter by selected sources (empty set = show all)
@@ -85,26 +128,14 @@ export const filteredSessions = derived(
     }
 
     // Advanced filters
-    if ($filters.folderStartsWith) {
-      const prefix = $filters.folderStartsWith.toLowerCase();
-      result = result.filter(s => s.cwd?.toLowerCase().startsWith(prefix));
-    }
-    if ($filters.folderContains) {
-      const substr = $filters.folderContains.toLowerCase();
-      result = result.filter(s => s.cwd?.toLowerCase().includes(substr));
-    }
-    if ($filters.branch) {
-      const br = $filters.branch.toLowerCase();
-      result = result.filter(s => s.branch?.toLowerCase().includes(br));
-    }
     if ($filters.hasCheckpoints !== null) {
       result = result.filter(s => s.has_checkpoints === $filters.hasCheckpoints);
     }
-    if ($filters.existsOnDisk !== null) {
-      result = result.filter(s => s.exists_on_disk === $filters.existsOnDisk);
-    }
     if ($filters.hideDeleted) {
       result = result.filter(s => s.exists_on_disk !== false);
+    }
+    if ($filters.hideEmpty) {
+      result = result.filter(s => s.turn_count > 0);
     }
     if ($filters.status !== null) {
       result = result.filter(s => s.status === $filters.status);
@@ -122,8 +153,12 @@ export const filteredSessions = derived(
       result = result.filter(s => (s.created_at ?? '') <= $filters.dateTo);
     }
 
-    // Sort
+    // Sort — pinned first, then by chosen sort field
     result = [...result].sort((a, b) => {
+      const aPinned = $pinned.has(a.id + ':' + a.source) ? 1 : 0;
+      const bPinned = $pinned.has(b.id + ':' + b.source) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+
       switch ($sort) {
         case 'updated':
           return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
@@ -186,5 +221,21 @@ export const groupedSessions = derived(
     }
 
     return groups;
+  }
+);
+
+/** Apply groupFilter to groupedSessions — filters group keys */
+export const filteredGroupedSessions = derived(
+  [groupedSessions, groupFilter],
+  ([$groups, $filter]) => {
+    if (!$filter.trim()) return $groups;
+    const q = $filter.toLowerCase();
+    const filtered: Record<string, SessionSummary[]> = {};
+    for (const [key, sessions] of Object.entries($groups)) {
+      if (key.toLowerCase().includes(q)) {
+        filtered[key] = sessions;
+      }
+    }
+    return filtered;
   }
 );
