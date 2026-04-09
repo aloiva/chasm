@@ -28,6 +28,17 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 **Keyboard shortcut**: `Ctrl+R` rescans all sessions.
 
+<!-- GIFs — record with ScreenToGif or ShareX, save to docs/gifs/ -->
+
+### Search sessions
+![Search sessions](docs/gifs/search-sessions.gif)
+
+### Views
+![Views](docs/gifs/views.gif)
+
+### Filters
+![Filters](docs/gifs/filters.gif)
+
 ## Right-Click Context Menu
 
 Right-click any session for quick actions:
@@ -111,6 +122,8 @@ The filter panel lets you narrow down sessions before grouping:
 - **Status** — Active (on disk) or Deleted
 - **Date range** — filter by creation date
 - **Hide deleted / Hide empty** — clean up the list
+
+**About deleted sessions**: sessions that were deleted from disk still appear as "Deleted" until the session store database is reset. You can trigger a reset via **Settings → Reindex Sessions** (experimental). This rebuilds the Copilot CLI session index, but the cleanup may not always reflect immediately — a restart or `Ctrl+R` rescan may be needed.
 
 Filters specifically narrow sessions by the group field. Session search does the same but matches across all session metadata. Group search narrows which groups are visible, not which sessions.
 

@@ -240,4 +240,5 @@ The GitHub Actions workflow builds on `windows-latest` and attaches installers t
 - **Terminal lifecycle**: terminals spawned by chasm are killed when the app exits (Windows Job Object behaviour). Use **Copy ID** to resume in a separate terminal unlinked to the app.
 - **VS Code resume**: cannot open a specific Copilot Chat session — VS Code Copilot Chat doesn't expose a CLI/URI for individual sessions. Resume opens the workspace folder only.
 - **VS Code sessions are read-only**: `state.vscdb` is owned by VS Code. Rename and delete are not supported for VS Code Copilot sessions.
+- **Deleted sessions persist in DB**: sessions deleted from disk still appear as "Deleted" until the session store database is reset. Use **Settings → Reindex Sessions** (experimental) to rebuild the index. A restart or `Ctrl+R` may be needed after reindexing.
 - **macOS icons**: `.icns` generation requires macOS-specific tooling. Current build targets Windows only.
