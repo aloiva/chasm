@@ -72,6 +72,7 @@ export interface FilterState {
   maxTurns: number | null;
   dateFrom: string;
   dateTo: string;
+  titleFilter: string;
   folderFilter: string;
   branchFilter: string;
 }
@@ -85,6 +86,7 @@ export const defaultFilters: FilterState = {
   maxTurns: null,
   dateFrom: '',
   dateTo: '',
+  titleFilter: '',
   folderFilter: '',
   branchFilter: '',
 };
@@ -106,6 +108,7 @@ export const activeFilterCount = derived(filters, ($f) => {
   if ($f.maxTurns !== null) count++;
   if ($f.dateFrom) count++;
   if ($f.dateTo) count++;
+  if ($f.titleFilter) count++;
   if ($f.folderFilter) count++;
   if ($f.branchFilter) count++;
   return count;
@@ -157,6 +160,17 @@ export const filteredSessions = derived(
     }
     if ($filters.dateTo) {
       result = result.filter(s => (s.created_at ?? '') <= $filters.dateTo);
+    }
+
+    // Title filter — comma-separated with operators, OR logic
+    if ($filters.titleFilter.trim()) {
+      const matchers = parseSearchTerms($filters.titleFilter);
+      if (matchers.length > 0) {
+        result = result.filter(s => {
+          const title = s.title ?? '';
+          return matchesAny(matchers, title);
+        });
+      }
     }
 
     // Folder filter — comma-separated with operators, OR logic

@@ -34,6 +34,17 @@
       </div>
 
       <div class="filter-group">
+        <label class="filter-label">Title</label>
+        <input
+          type="text"
+          class="filter-input"
+          placeholder="e.g. startswith=fix+!test"
+          value={$filters.titleFilter}
+          oninput={(e: Event) => updateFilter('titleFilter', (e.target as HTMLInputElement).value)}
+        />
+      </div>
+
+      <div class="filter-group">
         <label class="filter-label">Folder (comma-separated)</label>
         <input
           type="text"
