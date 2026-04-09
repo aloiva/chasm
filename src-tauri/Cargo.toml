@@ -1,7 +1,7 @@
 [package]
 name = "chasm"
 version = "0.1.0"
-description = "CHASM - Centralised Hub for Agent Session Manager"
+description = "chasm - centralised hub for agent session manager"
 authors = ["aloiva"]
 edition = "2021"
 

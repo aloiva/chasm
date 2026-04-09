@@ -2,7 +2,7 @@
 
 ## Overview
 
-CHASM uses a **source adapter pattern** to unify session data from multiple AI coding tools into one UI. Each tool is a Rust struct implementing the `SessionSource` trait.
+chasm uses a **source adapter pattern** to unify session data from multiple AI coding tools into one UI. Each tool is a Rust struct implementing the `SessionSource` trait.
 
 ## Source Adapter System
 

@@ -1,4 +1,4 @@
-# CHASM
+# chasm
 
 **C**entralised **H**ub for **A**gent **S**ession **M**anager
 
