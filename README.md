@@ -186,3 +186,4 @@ All valid paths are scanned and sessions are merged (deduplicated by session ID)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — source adapter plugin system
 - [docs/DECISIONS.md](docs/DECISIONS.md) — design decisions with measured reasoning
 - [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — data format reference
+- [docs/RELEASE.md](docs/RELEASE.md) — build commands, version files, and release process
