@@ -7,6 +7,7 @@ import {
   collapsedGroups,
   filters,
   groupedSessions,
+  searchQuery,
   defaultFilters,
   type FilterState,
 } from './sessions';
@@ -140,7 +141,14 @@ export function deleteAllUserSetups() {
   activeSetupId.set(null);
 }
 
-/** Clear the active setup indicator */
+/** Clear the active setup and reset all stores to defaults */
 export function clearActiveSetup() {
   activeSetupId.set(null);
+  viewMode.set('source');
+  sortBy.set('updated');
+  selectedSources.set(new Set());
+  searchQuery.set('');
+  groupFilter.set('');
+  collapsedGroups.set(new Set());
+  filters.set({ ...defaultFilters });
 }
