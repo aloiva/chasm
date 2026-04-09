@@ -17,6 +17,8 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 ## Toolbar
 
+![Toolbar overview](docs/gifs/toolbar.gif)
+
 | Button | What it does |
 |--------|-------------|
 | **Search** | Filter sessions by title, ID, folder, branch, source, or summary. Operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`. Use `,` for OR, `+` for AND, `()` for grouping |
@@ -32,6 +34,8 @@ Each feature is described in detail in its own section below: [Search](#search),
 
 ## Right-Click Context Menu
 
+![Right-click context menu](docs/gifs/rightclick-context-menu.gif)
+
 Right-click any session for quick actions:
 - **Resume** — opens a terminal with the session resumed, ready to continue the conversation
 - **Preview** — opens the detail panel for that session
@@ -44,6 +48,8 @@ Right-click any session for quick actions:
 chasm has two search inputs — **session search** and **group search** — each targeting different data.
 
 ### Session Search (toolbar)
+
+![Session search](docs/gifs/session-search.gif)
 
 Searches across all session metadata: title, session ID, folder path, branch, source, and summary. Any detail about a session can be matched.
 
@@ -60,6 +66,8 @@ Searches across all session metadata: title, session ID, folder path, branch, so
 
 ### Group Search (above session list)
 
+![Group search](docs/gifs/group-search.gif)
+
 Filters which **groups** are visible based on the group label text in the current view. Only the group name is searched — not the sessions inside it.
 
 - In **Folder view** → searches folder paths
@@ -74,6 +82,14 @@ Same operators and combinators as session search: `startswith=`, `endswith=`, `c
 Setups are the most powerful feature in chasm. They save the full configuration — view mode, sort, filters, session search, and group search — as a reusable preset for one-click switching between workflows.
 
 ### When to use setups
+
+**Simple setup** — save and switch between basic configurations:
+
+![Simple custom setups](docs/gifs/simple-custom-setups.gif)
+
+**Complex setup** — combine filters, search, and group search for advanced workflows:
+
+![Complex custom setups](docs/gifs/complex-custom-setups.gif)
 
 | Use case | Setup config | Why |
 |----------|-------------|-----|
