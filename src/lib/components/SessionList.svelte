@@ -50,7 +50,7 @@
       <input
         type="text"
         class="group-filter"
-        placeholder="Search in groups as per view.. (ex. repo1,repo2 (if folder view), copilot cli (if source view), dev,master (if branch view))"
+        placeholder="Search in groups.. (ex. repo1,!test,startswith=feat,endswith=cli)"
         bind:value={$groupFilter}
       />
       {#if $groupFilter}

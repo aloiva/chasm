@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { SessionSummary, SourceInfo } from '$lib/types/session';
+import { parseSearchTerms, matchesAny } from '$lib/utils/search';
 
 export const sessions = writable<SessionSummary[]>([]);
 export const sources = writable<SourceInfo[]>([]);
@@ -115,15 +116,15 @@ export const filteredSessions = derived(
   ([$sessions, $query, $sort, $filters, $pinned]) => {
     let result = $sessions;
 
-    // Filter by search query — comma-separated terms, OR logic
+    // Filter by search query — comma-separated terms with operators, OR logic
     if ($query.trim()) {
-      const terms = $query.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      if (terms.length > 0) {
+      const matchers = parseSearchTerms($query);
+      if (matchers.length > 0) {
         result = result.filter(s => {
           const haystack = [
             s.title, s.first_message, s.cwd, s.branch, s.id
           ].map(v => (v ?? '').toLowerCase()).join(' ');
-          return terms.some(q => haystack.includes(q));
+          return matchers.some(m => m(haystack));
         });
       }
     }
@@ -158,24 +159,24 @@ export const filteredSessions = derived(
       result = result.filter(s => (s.created_at ?? '') <= $filters.dateTo);
     }
 
-    // Folder filter — comma-separated, case-insensitive substring match (OR)
+    // Folder filter — comma-separated with operators, OR logic
     if ($filters.folderFilter.trim()) {
-      const folders = $filters.folderFilter.split(',').map(f => f.trim().toLowerCase()).filter(Boolean);
-      if (folders.length > 0) {
+      const matchers = parseSearchTerms($filters.folderFilter);
+      if (matchers.length > 0) {
         result = result.filter(s => {
-          const cwd = (s.cwd ?? '').toLowerCase();
-          return folders.some(f => cwd.includes(f));
+          const cwd = s.cwd ?? '';
+          return matchesAny(matchers, cwd);
         });
       }
     }
 
-    // Branch filter — comma-separated, case-insensitive substring match (OR)
+    // Branch filter — comma-separated with operators, OR logic
     if ($filters.branchFilter.trim()) {
-      const branches = $filters.branchFilter.split(',').map(b => b.trim().toLowerCase()).filter(Boolean);
-      if (branches.length > 0) {
+      const matchers = parseSearchTerms($filters.branchFilter);
+      if (matchers.length > 0) {
         result = result.filter(s => {
-          const branch = (s.branch ?? '').toLowerCase();
-          return branches.some(b => branch.includes(b));
+          const branch = s.branch ?? '';
+          return matchesAny(matchers, branch);
         });
       }
     }
@@ -262,36 +263,17 @@ export const groupedSessions = derived(
 );
 
 /** Apply groupFilter to groupedSessions — filters group keys.
- *  Supports comma-separated patterns. Wrap in /regex/ for regex matching. */
+ *  Supports comma-separated patterns with operators (startswith=, endswith=, not=, !, /regex/). */
 export const filteredGroupedSessions = derived(
   [groupedSessions, groupFilter],
   ([$groups, $filter]) => {
     if (!$filter.trim()) return $groups;
-    const patterns = $filter
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (patterns.length === 0) return $groups;
-
-    const matchers = patterns.map((p) => {
-      const rxMatch = p.match(/^\/(.+)\/([gimsuy]*)$/);
-      if (rxMatch) {
-        try {
-          const rx = new RegExp(rxMatch[1], rxMatch[2] || 'i');
-          return (key: string) => rx.test(key);
-        } catch {
-          // Invalid regex — fall back to substring
-          const q = p.toLowerCase();
-          return (key: string) => key.toLowerCase().includes(q);
-        }
-      }
-      const q = p.toLowerCase();
-      return (key: string) => key.toLowerCase().includes(q);
-    });
+    const matchers = parseSearchTerms($filter);
+    if (matchers.length === 0) return $groups;
 
     const filtered: Record<string, SessionSummary[]> = {};
     for (const [key, sessions] of Object.entries($groups)) {
-      if (matchers.some((m) => m(key))) {
+      if (matchesAny(matchers, key)) {
         filtered[key] = sessions;
       }
     }

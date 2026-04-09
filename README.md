@@ -19,7 +19,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 | Button | What it does |
 |--------|-------------|
-| **Search** | Filter sessions by text (matches title, summary, branch, folder) |
+| **Search** | Filter sessions by text with operators: plain text (contains by default), `startswith=`, `endswith=`, `not=`/`!`, `/regex/` |
 | **View** | Switch grouping: Source, Folder, Branch, Date |
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
@@ -41,8 +41,8 @@ Right-click any session for quick actions:
 
 The filter panel lets you narrow down sessions before grouping:
 
-- **Folder** — comma-separated folder names; matches any session whose working directory contains one of the values (e.g. `myrepo,project-x`)
-- **Branch** — comma-separated branch names; matches any session on a matching branch (e.g. `main,dev,feature`)
+- **Folder** — comma-separated; supports operators (`startswith=`, `endswith=`, `not=`/`!`, `/regex/`, or plain text for contains)
+- **Branch** — comma-separated; supports same operators as folder
 - **Min/Max turns** — filter by conversation length
 - **Checkpoints** — show only sessions with/without checkpoints
 - **Status** — Active (on disk) or Deleted
@@ -63,12 +63,12 @@ Setups save your current view, sort, and filter configuration as a reusable pres
 
 | Setup name | View | Filters / Group Filter | When to use |
 |-----------|------|------------------------|-------------|
-| `Copilot CLI Sessions` | Source | group filter: `Copilot CLI` | Show only Copilot CLI sessions (built-in) |
-| `VS Code Chat Sessions` | Source | group filter: `VS Code Copilot` | Show only VS Code Chat sessions (built-in) |
+| `Copilot CLI Sessions` | Source | group search: `Copilot CLI` | Show only Copilot CLI sessions (built-in) |
+| `VS Code Chat Sessions` | Source | group search: `VS Code Copilot` | Show only VS Code Chat sessions (built-in) |
+| `Dobby` | Folder | group search: `startswith=C:\dobby\agents,endswith=_agent-cli` | Dobby agent sessions (built-in) |
 | `my-project` | Branch | folder: `C:\code\my-project` | Focus on one repo, grouped by branch |
 | `active-work` | Source | branch: `main,dev`; min turns: 3 | Find meaningful sessions on key branches |
 | `recent-long` | Date | min turns: 10; date: last 7 days | Review substantial recent sessions |
-| `dobby` | Folder | *(built-in, auto-configured)* | When Dobby is enabled in settings, this setup appears automatically |
 
 **Remove All** — the Setups dropdown includes a button to delete all custom setups at once.
 
@@ -77,7 +77,12 @@ Setups save your current view, sort, and filter configuration as a reusable pres
 When viewing sessions grouped by folder, branch, or date, the group search bar (above the session list) filters which groups are visible.
 
 - Separate multiple patterns with `,` (comma) — matches any pattern (OR logic)
-- Prefix a pattern with `/` to use regex (e.g. `/feature-.*`)
+- **Search operators** (default is `contains` when no operator is specified):
+  - `startswith=value` — groups whose name starts with value
+  - `endswith=value` — groups whose name ends with value
+  - `contains=value` — explicit contains (same as plain text)
+  - `not=value` or `!value` — exclude groups containing value
+  - `/regex/flags` — regex matching (e.g. `/feature-.*`)
 - Matching is case-insensitive
 
 ## Development

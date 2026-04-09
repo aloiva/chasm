@@ -90,14 +90,11 @@
             <span class="title-text">{detail.summary.title ?? '(unnamed)'}</span>
           </div>
           <div class="header-meta">
-            <span
+            <button
               class="session-id"
               title="Click to copy: {detail.summary.id}"
               onclick={() => navigator.clipboard.writeText(detail.summary.id)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') navigator.clipboard.writeText(detail.summary.id); }}
-            >🔑 {detail.summary.id.length > 24 ? detail.summary.id.slice(0, 24) + '…' : detail.summary.id}</span>
+            >🔑 {detail.summary.id.length > 24 ? detail.summary.id.slice(0, 24) + '…' : detail.summary.id}</button>
             {#if detail.summary.cwd}
               <span class="meta-item" title={detail.summary.cwd}>📁 {detail.summary.cwd}</span>
             {/if}
@@ -226,6 +223,11 @@
     font-family: var(--font-mono);
     color: var(--text-secondary);
     transition: color 0.15s;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    text-align: left;
   }
   .session-id:hover { color: var(--accent); }
   .files-badge {

@@ -48,6 +48,13 @@ Right-click any session card to access:
 
 - Real-time text search filters sessions by name, ID, or summary
 - Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`)
+- **Search operators** (default is `contains` when no operator is specified):
+  - `startswith=value` — matches sessions where any field starts with value
+  - `endswith=value` — matches sessions where any field ends with value
+  - `contains=value` — explicit contains (same as plain text)
+  - `not=value` or `!value` — excludes sessions containing value
+  - `/regex/flags` — regex matching
+  - `plain text` — default contains (substring match)
 - Debounced input to avoid excessive re-renders
 
 ### sort options
@@ -64,8 +71,9 @@ Right-click any session card to access:
 ### group search
 
 - Filter visible groups in real-time using the group search input
-- Placeholder is contextual: shows examples based on current view (e.g., `repo1,repo2` for folder view, `copilot cli` for source view, `dev,master` for branch view)
-- **Multiple patterns**: use commas to search for multiple terms (e.g., `dobby,project-x` shows groups matching either)
+- **Search operators** (same as session search): `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `/regex/`
+- Default (no operator) is `contains` — case-insensitive substring match
+- **Multiple patterns**: use commas to search for multiple terms (e.g., `startswith=feat,!test` shows groups starting with "feat" but not containing "test")
 - **Regex support**: wrap a pattern in `/regex/flags` for regex matching (e.g., `/^C:\\projects/i`)
 - Invalid regex gracefully falls back to plain text search
 - Combines with view mode — e.g., filter folder groups while in folder view
@@ -130,7 +138,7 @@ Access settings via the ⚙️ gear icon in the toolbar:
 - Save the current view configuration (view mode, session search, group search, sort, filters) as a named setup
 - Built-in **Copilot CLI Sessions** setup: switches to source view filtered to Copilot CLI
 - Built-in **VS Code Chat Sessions** setup: switches to source view filtered to VS Code Copilot
-- Built-in **Dobby** setup: switches to folder view filtered to `C:\dobby\agents` (visible when Dobby is enabled in settings)
+- Built-in **Dobby** setup: switches to folder view with group search `startswith=C:\dobby\agents,endswith=_agent-cli` (visible when Dobby is enabled in settings)
 - Apply any setup with one click to restore the full view state
 - Delete user-created setups from the setup menu
 - Active setup is visually highlighted

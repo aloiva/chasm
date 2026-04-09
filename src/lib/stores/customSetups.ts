@@ -63,7 +63,7 @@ const builtInSetups: CustomSetup[] = [
     config: {
       viewMode: 'folder',
       searchQuery: '',
-      groupFilter: 'C:\\dobby\\agents',
+      groupFilter: 'startswith=C:\\dobby\\agents,endswith=_agent-cli',
       collapseAll: true,
       sortBy: 'updated',
       filters: { ...defaultFilters },
