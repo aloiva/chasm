@@ -1,4 +1,4 @@
-import { writable, get, derived } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import {
   viewMode,
   sortBy,
@@ -10,7 +10,6 @@ import {
   defaultFilters,
   type FilterState,
 } from './sessions';
-import { settings } from './settings';
 
 export interface CustomSetupConfig {
   viewMode: 'source' | 'folder' | 'branch' | 'date';
@@ -30,37 +29,33 @@ export interface CustomSetup {
 
 const STORAGE_KEY = 'chasm-custom-setups';
 
-function getBuiltInSetups(): CustomSetup[] {
-  const s = get(settings);
-  const firstDobbyPath = (s.dobbyAgentsPaths || 'C:\\dobby\\agents').split(';')[0].trim();
-  return [
-    {
-      id: 'dobby',
-      name: 'Dobby',
-      builtIn: true,
-      config: {
-        viewMode: 'folder',
-        groupFilter: firstDobbyPath,
-        collapseAll: true,
-        selectedSources: ['copilot-cli'],
-        sortBy: 'updated',
-        filters: { ...defaultFilters },
-      },
+const builtInSetups: CustomSetup[] = [
+  {
+    id: 'dobby',
+    name: 'Dobby',
+    builtIn: true,
+    config: {
+      viewMode: 'folder',
+      groupFilter: 'C:\\dobby\\agents',
+      collapseAll: true,
+      selectedSources: ['copilot-cli'],
+      sortBy: 'updated',
+      filters: { ...defaultFilters },
     },
-  ];
-}
+  },
+];
 
 function loadSetups(): CustomSetup[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const userSetups = JSON.parse(raw) as CustomSetup[];
-      return [...getBuiltInSetups(), ...userSetups.filter((s) => !s.builtIn)];
+      return [...builtInSetups, ...userSetups.filter((s) => !s.builtIn)];
     }
   } catch {
     /* ignore corrupt data */
   }
-  return [...getBuiltInSetups()];
+  return [...builtInSetups];
 }
 
 function persistSetups(setups: CustomSetup[]) {

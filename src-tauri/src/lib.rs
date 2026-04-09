@@ -15,7 +15,6 @@ use std::os::windows::process::CommandExt;
 
 struct AppState {
     registry: Mutex<SourceRegistry>,
-    dobby_paths: Mutex<Vec<String>>,
 }
 
 #[tauri::command]
@@ -225,7 +224,7 @@ fn reindex_sessions() -> Result<String, String> {
 /// `session_type` is "cli" (Copilot CLI) or "dobby".
 /// If `path` is empty, defaults to the current user's home directory.
 #[tauri::command]
-fn new_session(state: State<AppState>, path: String, session_type: String) -> Result<String, String> {
+fn new_session(path: String, session_type: String) -> Result<String, String> {
     let mut work_dir = if path.is_empty() {
         dirs::home_dir()
             .map(|p| p.to_string_lossy().to_string())
@@ -237,26 +236,19 @@ fn new_session(state: State<AppState>, path: String, session_type: String) -> Re
     let launch_cmd = match session_type.as_str() {
         "cli" => "copilot".to_string(),
         "dobby" => {
-            let dobby_paths = state.dobby_paths.lock().map_err(|e| e.to_string())?;
-            let wd_lower = work_dir.to_lowercase();
-            let is_valid = dobby_paths.iter().any(|p| wd_lower.starts_with(&p.to_lowercase()));
-            if !is_valid {
-                let allowed = if dobby_paths.is_empty() {
-                    "none configured".to_string()
-                } else {
-                    dobby_paths.join(", ")
-                };
-                return Err(format!(
-                    "Dobby sessions can only be started in configured paths: {}",
-                    allowed
-                ));
-            }
-            // Start-Copilot.ps1 lives one level above the agent folder
+            // Validate by checking for Start-Copilot.ps1 in parent directory
             let parent = std::path::Path::new(&work_dir)
                 .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| work_dir.clone());
-            work_dir = parent;
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from(&work_dir));
+            let script = parent.join("Start-Copilot.ps1");
+            if !script.exists() {
+                return Err(format!(
+                    "No Start-Copilot.ps1 found in {}. Is this a Dobby agents directory?",
+                    parent.display()
+                ));
+            }
+            work_dir = parent.to_string_lossy().to_string();
             ".\\Start-Copilot.ps1".to_string()
         }
         other => return Err(format!("Unknown session type: {}", other)),
@@ -342,21 +334,12 @@ fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-fn set_dobby_paths(state: State<AppState>, paths: String) -> Result<(), String> {
-    let parsed: Vec<String> = paths
-        .split(';')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let mut dp = state.dobby_paths.lock().map_err(|e| e.to_string())?;
-    *dp = parsed;
-    Ok(())
-}
-
-#[tauri::command]
-fn get_dobby_paths(state: State<AppState>) -> Result<String, String> {
-    let dp = state.dobby_paths.lock().map_err(|e| e.to_string())?;
-    Ok(dp.join(";"))
+fn is_dobby_path(path: String) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    let parent = std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new(&path));
+    parent.join("Start-Copilot.ps1").exists()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -378,7 +361,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             registry: Mutex::new(registry),
-            dobby_paths: Mutex::new(vec!["C:\\dobby\\agents".to_string()]),
         })
         .setup(move |app| {
             // Set up filesystem watcher with debounce
@@ -422,8 +404,7 @@ pub fn run() {
             reindex_sessions,
             get_copilot_cli_path,
             set_copilot_cli_path,
-            set_dobby_paths,
-            get_dobby_paths,
+            is_dobby_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

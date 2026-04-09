@@ -224,15 +224,37 @@ export const groupedSessions = derived(
   }
 );
 
-/** Apply groupFilter to groupedSessions — filters group keys */
+/** Apply groupFilter to groupedSessions — filters group keys.
+ *  Supports semicolon-separated patterns. Wrap in /regex/ for regex matching. */
 export const filteredGroupedSessions = derived(
   [groupedSessions, groupFilter],
   ([$groups, $filter]) => {
     if (!$filter.trim()) return $groups;
-    const q = $filter.toLowerCase();
+    const patterns = $filter
+      .split(';')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (patterns.length === 0) return $groups;
+
+    const matchers = patterns.map((p) => {
+      const rxMatch = p.match(/^\/(.+)\/([gimsuy]*)$/);
+      if (rxMatch) {
+        try {
+          const rx = new RegExp(rxMatch[1], rxMatch[2] || 'i');
+          return (key: string) => rx.test(key);
+        } catch {
+          // Invalid regex — fall back to substring
+          const q = p.toLowerCase();
+          return (key: string) => key.toLowerCase().includes(q);
+        }
+      }
+      const q = p.toLowerCase();
+      return (key: string) => key.toLowerCase().includes(q);
+    });
+
     const filtered: Record<string, SessionSummary[]> = {};
     for (const [key, sessions] of Object.entries($groups)) {
-      if (key.toLowerCase().includes(q)) {
+      if (matchers.some((m) => m(key))) {
         filtered[key] = sessions;
       }
     }

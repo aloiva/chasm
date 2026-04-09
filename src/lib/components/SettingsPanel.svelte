@@ -9,10 +9,6 @@
   let pathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let pathError = $state('');
 
-  let dobbyPaths = $state($settings.dobbyAgentsPaths || 'C:\\dobby\\agents');
-  let dobbyStatus = $state<'idle' | 'saved' | 'error'>('idle');
-  let dobbyError = $state('');
-
   async function loadCopilotPath() {
     try {
       const saved = $settings.copilotCliPath;
@@ -75,28 +71,6 @@
     }
   }
 
-  async function saveDobbyPaths() {
-    dobbyStatus = 'idle';
-    dobbyError = '';
-    try {
-      await invoke('set_dobby_paths', { paths: dobbyPaths });
-      updateSetting('dobbyAgentsPaths', dobbyPaths);
-      dobbyStatus = 'saved';
-    } catch (e: any) {
-      dobbyStatus = 'error';
-      dobbyError = typeof e === 'string' ? e : e?.message || 'Failed to set paths';
-    }
-  }
-
-  function resetDobbyPaths() {
-    const def = 'C:\\dobby\\agents';
-    dobbyPaths = def;
-    updateSetting('dobbyAgentsPaths', def);
-    invoke('set_dobby_paths', { paths: def });
-    dobbyStatus = 'idle';
-    dobbyError = '';
-  }
-
   async function runReindex() {
     reindexStatus = 'running';
     try {
@@ -130,28 +104,6 @@
         />
         <span class="setting-label">Enable Dobby</span>
       </label>
-
-      {#if $settings.enableDobby}
-        <div class="path-setting">
-          <label class="setting-sublabel">Agent Paths <span class="hint">(semicolon-separated)</span></label>
-          <input
-            type="text"
-            class="path-input"
-            placeholder="C:\dobby\agents"
-            bind:value={dobbyPaths}
-            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveDobbyPaths(); }}
-          />
-          <div class="path-actions">
-            <button class="path-btn" onclick={saveDobbyPaths} title="Apply">Apply</button>
-            <button class="path-btn path-reset" onclick={resetDobbyPaths} title="Reset to default">Reset</button>
-          </div>
-          {#if dobbyStatus === 'saved'}
-            <span class="path-status saved">✓ Saved</span>
-          {:else if dobbyStatus === 'error'}
-            <span class="path-status error">{dobbyError}</span>
-          {/if}
-        </div>
-      {/if}
 
       <div class="settings-divider"></div>
       <div class="settings-header">Copilot CLI Path</div>
@@ -402,14 +354,5 @@
   }
   .path-status.error {
     color: var(--danger);
-  }
-  .setting-sublabel {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-    font-family: var(--font-mono);
-  }
-  .hint {
-    opacity: 0.6;
   }
 </style>

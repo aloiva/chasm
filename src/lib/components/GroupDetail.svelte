@@ -17,14 +17,19 @@
   const sessionPath = $derived.by(() => {
     const key = $selectedGroupKey ?? '';
     if ($viewMode === 'folder' && key) return key;
-    // Non-folder views: let the backend default to user home
     return '';
   });
 
-  const isDobbyPath = $derived.by(() => {
-    const lower = sessionPath.toLowerCase();
-    const paths = ($settings.dobbyAgentsPaths || '').split(';').map(p => p.trim().toLowerCase()).filter(Boolean);
-    return paths.some(p => lower.startsWith(p));
+  let isDobbyPath = $state(false);
+
+  // Check filesystem for Start-Copilot.ps1 when path changes
+  $effect(() => {
+    const path = sessionPath;
+    if (!path || !$settings.enableDobby) {
+      isDobbyPath = false;
+      return;
+    }
+    invoke<boolean>('is_dobby_path', { path }).then(v => { isDobbyPath = v; }).catch(() => { isDobbyPath = false; });
   });
 
   let showTypePicker = $state(false);

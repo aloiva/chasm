@@ -59,9 +59,17 @@ Right-click any session card to access:
 - Toggle which sources are visible (e.g. show only Copilot CLI sessions)
 - Filter pills in the toolbar for quick toggling
 
+### group filter
+
+- Filter visible groups in real-time using the filter input
+- **Multiple patterns**: use semicolons to search for multiple terms (e.g., `dobby;project-x` shows groups matching either)
+- **Regex support**: wrap a pattern in `/regex/flags` for regex matching (e.g., `/^C:\\projects/i`)
+- Invalid regex gracefully falls back to plain text search
+- Combines with view mode — e.g., filter folder groups while in folder view
+
 ### grouping
 
-- Sessions are grouped by **source** (Copilot CLI, VS Code Copilot)
+- Sessions can be grouped by **source**, **folder**, **branch**, or **date**
 - Each group has a collapsible header with session count
 - Group headers have their own context menu with bulk actions
 
@@ -106,8 +114,7 @@ The panel auto-refreshes when:
 
 Access settings via the ⚙️ gear icon in the toolbar:
 
-- **Enable Dobby** — toggle Dobby adapter (experimental, for `c:\dobby\agents` paths)
-- **Dobby Agent Paths** — when Dobby is enabled, configure semicolon-separated list of agent directories (e.g., `C:\dobby\agents;D:\projects\agents`); the built-in Dobby view and new-session validation use these paths
+- **Enable Dobby** — toggle Dobby adapter (experimental, for Dobby agent sessions)
 - **Copilot CLI Path** — override the default `~/.copilot` directory with a custom path; validates that the path exists before applying; persists across restarts
 - **Reindex** (experimental) — triggers `/chronicle reindex` to rebuild the Copilot CLI session index, useful when deleted sessions still appear
 
@@ -115,9 +122,11 @@ Access settings via the ⚙️ gear icon in the toolbar:
 
 ## custom setups
 
-- Define custom session sources with a name, path, and command
-- Custom setups appear as additional source options
-- Managed through the settings panel
+- Save the current view configuration (view mode, group filter, sort, sources, filters) as a named setup
+- Built-in **Dobby** setup: switches to folder view filtered to `C:\dobby\agents` — users can edit the filter to match their own Dobby installation
+- Apply any setup with one click to restore the full view state
+- Delete user-created setups from the setup menu
+- Active setup is visually highlighted
 
 ---
 
