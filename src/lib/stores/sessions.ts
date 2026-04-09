@@ -121,16 +121,17 @@ export const filteredSessions = derived(
       result = result.filter(s => $sources.has(s.source));
     }
 
-    // Filter by search query
+    // Filter by search query — comma-separated terms, OR logic
     if ($query.trim()) {
-      const q = $query.toLowerCase();
-      result = result.filter(s =>
-        (s.title?.toLowerCase().includes(q)) ||
-        (s.first_message?.toLowerCase().includes(q)) ||
-        (s.cwd?.toLowerCase().includes(q)) ||
-        (s.branch?.toLowerCase().includes(q)) ||
-        s.id.toLowerCase().includes(q)
-      );
+      const terms = $query.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (terms.length > 0) {
+        result = result.filter(s => {
+          const haystack = [
+            s.title, s.first_message, s.cwd, s.branch, s.id
+          ].map(v => (v ?? '').toLowerCase()).join(' ');
+          return terms.some(q => haystack.includes(q));
+        });
+      }
     }
 
     // Advanced filters

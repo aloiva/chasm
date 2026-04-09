@@ -54,7 +54,7 @@
       <input
         type="text"
         class="group-filter"
-        placeholder="Filter groups... (use ; for multiple, /regex/)"
+        placeholder="Filter groups... (comma-separated, /regex/)"
         bind:value={$groupFilter}
       />
       {#if $groupFilter}

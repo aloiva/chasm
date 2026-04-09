@@ -25,7 +25,7 @@
     <input
       type="text"
       class="search"
-      placeholder="Search sessions..."
+      placeholder="Search sessions... (comma-separated)"
       bind:value={$searchQuery}
     />
     {#if $searchQuery}
