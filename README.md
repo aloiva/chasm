@@ -28,19 +28,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 **Keyboard shortcut**: `Ctrl+R` rescans all sessions.
 
-<!-- GIFs — record with ScreenToGif or ShareX, save to docs/gifs/ -->
-
-### Search sessions
-![Search sessions](docs/gifs/search-sessions.gif)
-
-### Views
-![Views](docs/gifs/views.gif)
-
-### Filters
-![Filters](docs/gifs/filters.gif)
-
-### Setups
-![Setups](docs/gifs/setups.gif)
+Each feature is described in detail in its own section below: [Search](#search), [Filters](#filters), [Setups](#setups).
 
 ## Right-Click Context Menu
 
