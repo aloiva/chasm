@@ -158,6 +158,11 @@ C:\Users\you\.copilot\session-state, C:\Users\you\.copilot-old\session-state
 
 All valid paths are scanned and sessions are merged (deduplicated by session ID). This is useful when migrating between Copilot CLI versions or when session data lives in multiple locations.
 
+## Future Plans
+
+- **Checkpoint browsing** — browse and navigate session checkpoints directly within chasm
+- **AgentViz integration** — integrate [AgentViz](https://github.com/jayparikh/agentviz) for visual agent session exploration
+
 ## Documentation
 
 - [docs/FEATURES.md](docs/FEATURES.md) — full feature list and capabilities
