@@ -22,23 +22,24 @@ A desktop app that aggregates AI coding sessions from multiple tools into a sing
 Right-click any session card to access:
 
 - **Preview** — open the session detail panel
-- **Pin / Unpin** — pin the session to the top of the list
-- **Copy ID** — copy the session ID to clipboard
+- **Pin / Unpin** — pin the session to the top of the list (stored globally in localStorage, persists across restarts; added in v0.1.0)
+- **Copy ID** — copy the session ID to clipboard; useful for resuming in a separate terminal via `copilot --resume=<id>`, unlinked to chasm (so the session survives if the app closes)
 - **Open Folder** — open the session's directory in file explorer
-- **Resume** — continue the session in its native tool
+- **Resume** — opens a terminal with the session resumed, ready to continue the conversation
 - **Rename** — change the session display name (Copilot CLI only)
-- **Delete** — remove the session with confirmation dialog (Copilot CLI only)
+- **Delete** — permanently removes the session folder from disk (with confirmation dialog; Copilot CLI only)
 
 ### resume behaviour
 
-- **Copilot CLI**: spawns a new PowerShell terminal window with `copilot --resume=<id>`. Uses `Start-Process` to ensure the terminal is fully interactive with user input support.
+- **Copilot CLI**: opens a PowerShell terminal with the session resumed via `copilot --resume=<id>`. The terminal is fully interactive.
 - **VS Code Copilot Chat**: opens VS Code to the associated workspace folder via `Start-Process code <path>`.
 
 ### pinned sessions
 
 - Pin any session from the context menu or by clicking the 📌 icon
 - Pinned sessions always appear at the top of the list, regardless of sort order
-- Pins persist across app restarts (stored in localStorage)
+- Pins are stored globally in localStorage and persist across app restarts
+- Added in v0.1.0
 
 ---
 
@@ -46,14 +47,14 @@ Right-click any session card to access:
 
 ### session search
 
-- Real-time text search filters sessions by name, ID, or summary
+- Real-time text search across all session metadata: title, session ID, folder path, branch, source, and summary. Any detail about a session can be matched.
 - Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`)
 - **Search operators** (default is `contains` when no operator is specified):
   - `startswith=value` — matches sessions where any field starts with value
   - `endswith=value` — matches sessions where any field ends with value
   - `contains=value` — explicit contains (same as plain text)
   - `not=value` or `!value` — excludes sessions containing value
-  - `/regex/flags` — regex matching
+  - `/regex/flags` — regex matching (e.g. `/feat-\d+/i`). To test: type `/pattern/` in any search input. Invalid regex falls back to plain text.
   - `plain text` — default contains (substring match)
 - Debounced input to avoid excessive re-renders
 
@@ -70,7 +71,11 @@ Right-click any session card to access:
 
 ### group search
 
-- Filter visible groups in real-time using the group search input
+- Filters which **groups** are visible based on the group label text in the current view — only the group name is searched, not sessions inside it
+  - In **Folder view** → searches folder paths
+  - In **Branch view** → searches branch names
+  - In **Source view** → searches source names (e.g. "Copilot CLI")
+  - In **Date view** → searches date bucket labels
 - **Search operators** (same as session search): `startswith=`, `endswith=`, `contains=`, `not=`/`!`, `/regex/`
 - Default (no operator) is `contains` — case-insensitive substring match
 - **Multiple patterns**: use commas to search for multiple terms (e.g., `startswith=feat,!test` shows groups starting with "feat" but not containing "test")
@@ -135,10 +140,32 @@ Access settings via the ⚙️ gear icon in the toolbar:
 
 ## custom setups
 
+Setups are the most powerful feature in chasm. They save the full configuration — view mode, sort, filters, session search, and group search — as a reusable preset for one-click switching.
+
+### when to use setups
+
+| Use case | View | Filter | Session Search | Group Search |
+|----------|------|--------|----------------|--------------|
+| Focus on one repo across branches | Branch | folder: `C:\myrepo` | — | — |
+| One repo with duplicates, per branch | Branch | folder: `C:\repopath1,C:\duplicaterepopath2` | — | — |
+| Above, only release branches | Branch | folder: `C:\repopath1,C:\duplicaterepopath2` | — | `release/` |
+| Only Copilot CLI sessions | Source | — | — | `Copilot CLI` |
+| Only VS Code sessions | Source | — | — | `VS Code Copilot` |
+| Dobby agent sessions | Folder | — | — | `startswith=C:\dobby\agents,endswith=_agent-cli` |
+| Active meaningful work | Source | branch: `main,dev`, min turns: 3 | — | — |
+| Recent long sessions | Date | min turns: 10, date: last 7 days | — | — |
+
+### built-in setups
+
+| Setup | View | Sort | Filter | Session Search | Group Search |
+|-------|------|------|--------|----------------|--------------|
+| Copilot CLI Sessions | Source | — | — | — | `Copilot CLI` |
+| VS Code Chat Sessions | Source | — | — | — | `VS Code Copilot` |
+| Dobby | Folder | Modified | — | — | `startswith=C:\dobby\agents,endswith=_agent-cli` |
+
+### how to create
+
 - Save the current view configuration (view mode, session search, group search, sort, filters) as a named setup
-- Built-in **Copilot CLI Sessions** setup: switches to source view filtered to Copilot CLI
-- Built-in **VS Code Chat Sessions** setup: switches to source view filtered to VS Code Copilot
-- Built-in **Dobby** setup: switches to folder view with group search `startswith=C:\dobby\agents,endswith=_agent-cli` (visible when Dobby is enabled in settings)
 - Apply any setup with one click to restore the full view state
 - Delete user-created setups from the setup menu
 - Active setup is visually highlighted
@@ -210,7 +237,7 @@ The GitHub Actions workflow builds on `windows-latest` and attaches installers t
 
 ## known limitations
 
-- **Terminal lifecycle**: terminals spawned by chasm are killed when the app exits (Windows Job Object behaviour). This is a platform limitation — `CREATE_BREAKAWAY_FROM_JOB` requires elevated privileges.
+- **Terminal lifecycle**: terminals spawned by chasm are killed when the app exits (Windows Job Object behaviour). Use **Copy ID** to resume in a separate terminal unlinked to the app.
 - **VS Code resume**: cannot open a specific Copilot Chat session — VS Code Copilot Chat doesn't expose a CLI/URI for individual sessions. Resume opens the workspace folder only.
 - **VS Code sessions are read-only**: `state.vscdb` is owned by VS Code. Rename and delete are not supported for VS Code Copilot sessions.
 - **macOS icons**: `.icns` generation requires macOS-specific tooling. Current build targets Windows only.
