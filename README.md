@@ -43,6 +43,15 @@ Right-click any session for quick actions:
 - **Pin / Unpin** — pin a session to the top of its group; pins are stored globally in localStorage and persist across restarts (added in v0.1.0)
 - **Delete** — permanently removes the session folder from disk (with confirmation dialog)
 
+## New Session
+
+Click any group header to open the group detail panel. The **+ New Session** button launches a fresh session in the context of that group:
+
+- In **Folder view** — the new session opens in the selected folder's working directory
+- Clicking the button shows a type picker: **Copilot CLI** (always available) or **Dobby** (shown only when the folder contains a Dobby agent with `Start-Copilot.ps1`)
+- The session opens in a new PowerShell terminal window, independent of chasm
+- If no folder context is available (e.g. Source or Date view), defaults to the user's home directory
+
 ## Search
 
 chasm has two search inputs — **session search** and **group search** — each targeting different data.

@@ -41,6 +41,15 @@ Right-click any session card to access:
 - Pins are stored globally in localStorage and persist across app restarts
 - Added in v0.1.0
 
+### new session
+
+Click any group header to open the group detail panel. The **+ New Session** button launches a fresh session in the context of that group:
+
+- In **Folder view** — the new session opens in the selected folder's working directory
+- Clicking the button shows a type picker: **Copilot CLI** (always available) or **Dobby** (shown only when the folder contains a Dobby agent with `Start-Copilot.ps1`)
+- The session opens in a new PowerShell terminal window, independent of chasm
+- If no folder context is available (e.g. Source or Date view), defaults to the user's home directory
+
 ---
 
 ## browsing & filtering
@@ -50,7 +59,8 @@ Right-click any session card to access:
 - Real-time text search across all session metadata: title, session ID, folder path, branch, source, and summary. Any detail about a session can be matched.
 - Supports multiple comma-separated search terms (e.g., `repo1,title1,title2`) — **OR** logic across terms
 - Use `+` to combine terms with **AND** logic (e.g., `startswith=feat+endswith=fix` matches both)
-- Combined: `A+B,C` = (A AND B) OR C
+- Combined: `A+B,C` = A OR (B AND C)
+- Parentheses `()` override precedence: `(A,B)+C` = (A OR B) AND C
 - **Search operators** (default is `contains` when no operator is specified):
   - `startswith=value` — matches sessions where any field starts with value
   - `endswith=value` — matches sessions where any field ends with value
@@ -78,7 +88,7 @@ Right-click any session card to access:
   - In **Source view** → searches source names (e.g. "Copilot CLI")
   - In **Date view** → searches date bucket labels
 - **Search operators** (same as session search): `startswith=`, `endswith=`, `contains=`, `not=`/`!`
-- **Combinators**: `,` for OR, `+` for AND (e.g., `startswith=feat+!test` matches groups starting with "feat" that don't contain "test")
+- **Combinators**: `,` for OR, `+` for AND, `()` for grouping (e.g., `startswith=feat+!test` matches groups starting with "feat" that don't contain "test")
 - Default (no operator) is `contains` — case-insensitive substring match
 - **Multiple patterns**: use commas for OR (e.g., `startswith=feat,!test` shows groups starting with "feat" OR not containing "test"), use `+` for AND
 - Combines with view mode — e.g., filter folder groups while in folder view
@@ -186,39 +196,6 @@ Setups are the most powerful feature in chasm. They save the full configuration 
 - **Resizable sidebar** — drag the divider between session list and detail panel
 - **Collapsible groups** — click group headers to expand/collapse
 - **Responsive** — detail panel fills available space
-
----
-
-## build & release
-
-### development
-
-```bash
-npm install
-npm run tauri dev
-```
-
-### production build
-
-```bash
-npm run tauri build
-```
-
-Produces three artifacts in `src-tauri/target/release/`:
-- `chasm.exe` — standalone executable
-- `bundle/nsis/chasm_<version>_x64-setup.exe` — NSIS installer with Start Menu entry
-- `bundle/msi/chasm_<version>_x64_en-US.msi` — MSI installer for enterprise deployment
-
-### github releases
-
-Push a version tag to trigger automated builds:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-The GitHub Actions workflow builds on `windows-latest` and attaches installers to a GitHub Release.
 
 ---
 
