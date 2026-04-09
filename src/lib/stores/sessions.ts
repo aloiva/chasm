@@ -72,6 +72,8 @@ export interface FilterState {
   maxTurns: number | null;
   dateFrom: string;
   dateTo: string;
+  folderFilter: string;
+  branchFilter: string;
 }
 
 export const defaultFilters: FilterState = {
@@ -83,6 +85,8 @@ export const defaultFilters: FilterState = {
   maxTurns: null,
   dateFrom: '',
   dateTo: '',
+  folderFilter: '',
+  branchFilter: '',
 };
 
 export const filters = writable<FilterState>({ ...defaultFilters });
@@ -102,6 +106,8 @@ export const activeFilterCount = derived(filters, ($f) => {
   if ($f.maxTurns !== null) count++;
   if ($f.dateFrom) count++;
   if ($f.dateTo) count++;
+  if ($f.folderFilter) count++;
+  if ($f.branchFilter) count++;
   return count;
 });
 
@@ -151,6 +157,28 @@ export const filteredSessions = derived(
     }
     if ($filters.dateTo) {
       result = result.filter(s => (s.created_at ?? '') <= $filters.dateTo);
+    }
+
+    // Folder filter — comma-separated, case-insensitive substring match (OR)
+    if ($filters.folderFilter.trim()) {
+      const folders = $filters.folderFilter.split(',').map(f => f.trim().toLowerCase()).filter(Boolean);
+      if (folders.length > 0) {
+        result = result.filter(s => {
+          const cwd = (s.cwd ?? '').toLowerCase();
+          return folders.some(f => cwd.includes(f));
+        });
+      }
+    }
+
+    // Branch filter — comma-separated, case-insensitive substring match (OR)
+    if ($filters.branchFilter.trim()) {
+      const branches = $filters.branchFilter.split(',').map(b => b.trim().toLowerCase()).filter(Boolean);
+      if (branches.length > 0) {
+        result = result.filter(s => {
+          const branch = (s.branch ?? '').toLowerCase();
+          return branches.some(b => branch.includes(b));
+        });
+      }
     }
 
     // Sort — pinned first, then by chosen sort field

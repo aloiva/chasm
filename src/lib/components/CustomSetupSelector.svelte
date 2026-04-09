@@ -5,6 +5,7 @@
     applySetup,
     saveCurrentAsSetup,
     deleteSetup,
+    deleteAllUserSetups,
     clearActiveSetup,
   } from '$lib/stores/customSetups';
   import { settings } from '$lib/stores/settings';
@@ -17,6 +18,7 @@
     $settings.enableDobby ? $customSetups : $customSetups.filter(s => s.id !== 'dobby')
   );
   const activeSetup = $derived(visibleSetups.find((s) => s.id === $activeSetupId));
+  const hasUserSetups = $derived(visibleSetups.some(s => !s.builtIn));
 
   function handleSelect(setup: (typeof $customSetups)[number]) {
     applySetup(setup);
@@ -120,6 +122,13 @@
       {:else}
         <button class="option save-trigger" onclick={() => (saving = true)}>
           + Save current as setup
+        </button>
+      {/if}
+
+      {#if hasUserSetups}
+        <div class="divider"></div>
+        <button class="option remove-all" onclick={() => deleteAllUserSetups()}>
+          🗑 Remove all custom setups
         </button>
       {/if}
     </div>
@@ -258,6 +267,14 @@
   .save-trigger {
     color: var(--text-muted);
     font-style: italic;
+  }
+
+  .remove-all {
+    color: var(--error, #f85149);
+    font-size: 11px;
+  }
+  .remove-all:hover {
+    background: rgba(248, 81, 73, 0.1);
   }
 
   .save-row {

@@ -130,6 +130,16 @@ export function deleteSetup(id: string) {
   if (get(activeSetupId) === id) activeSetupId.set(null);
 }
 
+/** Delete all user-created setups */
+export function deleteAllUserSetups() {
+  customSetups.update((list) => {
+    const updated = list.filter((s) => s.builtIn);
+    persistSetups(updated);
+    return updated;
+  });
+  activeSetupId.set(null);
+}
+
 /** Clear the active setup indicator */
 export function clearActiveSetup() {
   activeSetupId.set(null);

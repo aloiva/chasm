@@ -34,6 +34,28 @@
       </div>
 
       <div class="filter-group">
+        <label class="filter-label">Folder (comma-separated)</label>
+        <input
+          type="text"
+          class="filter-input"
+          placeholder="e.g. myproject,other-repo"
+          value={$filters.folderFilter}
+          oninput={(e: Event) => updateFilter('folderFilter', (e.target as HTMLInputElement).value)}
+        />
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Branch (comma-separated)</label>
+        <input
+          type="text"
+          class="filter-input"
+          placeholder="e.g. main,dev,feature"
+          value={$filters.branchFilter}
+          oninput={(e: Event) => updateFilter('branchFilter', (e.target as HTMLInputElement).value)}
+        />
+      </div>
+
+      <div class="filter-group">
         <label class="filter-label">Min turns</label>
         <input
           type="number"

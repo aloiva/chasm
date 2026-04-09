@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { searchQuery, sortBy, loading } from '$lib/stores/sessions';
+  import { searchQuery, sortBy } from '$lib/stores/sessions';
   import { invoke } from '@tauri-apps/api/core';
-  import { sessions, sources } from '$lib/stores/sessions';
+  import { sources } from '$lib/stores/sessions';
   import SourceFilter from './SourceFilter.svelte';
   import ViewSelector from './ViewSelector.svelte';
   import FilterPanel from './FilterPanel.svelte';
@@ -18,18 +18,6 @@
       console.error('Failed to fetch sources:', e);
     }
   });
-
-  async function scan() {
-    loading.set(true);
-    try {
-      const result = await invoke('list_sessions');
-      sessions.set(result as any[]);
-    } catch (e) {
-      console.error('Scan failed:', e);
-    } finally {
-      loading.set(false);
-    }
-  }
 </script>
 
 <div class="toolbar">
@@ -57,9 +45,6 @@
   <FilterPanel />
   <CustomSetupSelector />
   <SettingsPanel />
-  <button class="scan-btn" onclick={scan} disabled={$loading}>
-    {$loading ? '...' : '⟳ Scan'}
-  </button>
 </div>
 
 <style>
@@ -112,17 +97,4 @@
     font-family: var(--font-mono);
     cursor: pointer;
   }
-  .scan-btn {
-    padding: 5px 12px;
-    border-radius: var(--radius);
-    border: 1px solid var(--accent-green);
-    background: var(--accent-green);
-    color: #fff;
-    font-size: var(--font-size-small);
-    font-family: var(--font-mono);
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .scan-btn:hover { opacity: 0.9; }
-  .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
