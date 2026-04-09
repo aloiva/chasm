@@ -45,22 +45,22 @@
       </div>
 
       <div class="filter-group">
-        <label class="filter-label">Folder (comma-separated)</label>
+        <label class="filter-label">Folder</label>
         <input
           type="text"
           class="filter-input"
-          placeholder="e.g. myproject,other-repo"
+          placeholder="e.g. myproject,other  startswith=C:\"
           value={$filters.folderFilter}
           oninput={(e: Event) => updateFilter('folderFilter', (e.target as HTMLInputElement).value)}
         />
       </div>
 
       <div class="filter-group">
-        <label class="filter-label">Branch (comma-separated)</label>
+        <label class="filter-label">Branch</label>
         <input
           type="text"
           class="filter-input"
-          placeholder="e.g. main,dev,feature"
+          placeholder="e.g. main,dev  startswith=feature/"
           value={$filters.branchFilter}
           oninput={(e: Event) => updateFilter('branchFilter', (e.target as HTMLInputElement).value)}
         />
