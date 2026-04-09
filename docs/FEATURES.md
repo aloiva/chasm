@@ -117,7 +117,8 @@ The panel auto-refreshes when:
 Access settings via the ⚙️ gear icon in the toolbar:
 
 - **Enable Dobby** — toggle Dobby adapter (experimental, for Dobby agent sessions)
-- **Copilot CLI Path** — override the default `~/.copilot` directory with a custom path (comma-separated for multiple paths, e.g. `~/.copilot, ~/.copilot-old`); validates that the path exists before applying; uses the first valid path; persists across restarts
+- **Copilot CLI Sessions Path** — override the default `~/.copilot/session-state` directory with a custom path (comma-separated for multiple paths); validates that the path exists before applying; persists across restarts
+- **Session Store DB Path** — override the default `~/.copilot/session-store.db` file path; used for session metadata, turns, and checkpoints; validates that the path exists before applying; persists across restarts
 - **Reindex** (experimental) — triggers `/chronicle reindex` to rebuild the Copilot CLI session index, useful when deleted sessions still appear
 
 ---

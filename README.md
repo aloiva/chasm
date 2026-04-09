@@ -24,7 +24,7 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 | **Sort** | Order sessions by modified date, created date, turns, size, title, branch, folder, or source |
 | **Filters** | Advanced filtering — folder, branch, turn count, checkpoints, status, date range |
 | **Setups** | Save/load filter + view combinations as named presets |
-| **Settings** | Configure session path, Dobby mode, and theme |
+| **Settings** | Configure session paths, DB path, Dobby mode, and theme |
 
 **Keyboard shortcut**: `Ctrl+R` rescans all sessions.
 
@@ -95,12 +95,19 @@ npm run tauri build
 
 ## Configuring Session Paths
 
-By default, chasm reads Copilot CLI sessions from `~/.copilot/session-state/`. If your sessions are stored elsewhere (e.g. older Copilot CLI versions used `~/.copilot/history-session-state/`), you can configure the path in **Settings → Copilot CLI Path**.
+chasm has two configurable paths in **Settings** for Copilot CLI:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Copilot CLI Sessions Path** | `~/.copilot/session-state` | Directory containing session folders (workspace.yaml, events.jsonl) |
+| **Session Store DB Path** | `~/.copilot/session-store.db` | SQLite database with sessions, turns, checkpoints, files |
+
+If your sessions are stored elsewhere (e.g. older Copilot CLI versions used `~/.copilot/history-session-state/`), you can configure the paths individually.
 
 Multiple paths can be specified **comma-separated**:
 
 ```
-C:\Users\you\.copilot, C:\Users\you\.copilot-old
+C:\Users\you\.copilot\session-state, C:\Users\you\.copilot-old\session-state
 ```
 
 chasm will use the first valid path it finds. This is useful when migrating between Copilot CLI versions or when session data lives in non-default locations.
