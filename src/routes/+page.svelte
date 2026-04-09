@@ -64,21 +64,28 @@
     }
   }
 
+  function handleRescan() {
+    scanSessions();
+  }
+
   import { get } from 'svelte/store';
 
   onMount(async () => {
-    // Apply saved custom Copilot CLI path before first scan
-    // Supports comma-separated paths; uses the first valid one
-    const saved = get(settings).copilotCliPath;
-    if (saved) {
-      const paths = saved.split(',').map((p: string) => p.trim()).filter(Boolean);
-      for (const p of paths) {
-        try {
-          await invoke('set_copilot_cli_path', { path: p });
-          break;
-        } catch {
-          // Path may no longer exist — try next
-        }
+    // Apply saved custom paths before first scan (comma-separated, sent as-is to backend)
+    const savedCliPath = get(settings).copilotCliPath;
+    if (savedCliPath) {
+      try {
+        await invoke('set_copilot_cli_path', { path: savedCliPath });
+      } catch {
+        // Paths may no longer exist — backend will reject
+      }
+    }
+    const savedDbPath = get(settings).copilotDbPath;
+    if (savedDbPath) {
+      try {
+        await invoke('set_copilot_db_path', { path: savedDbPath });
+      } catch {
+        // Path may no longer exist
       }
     }
 
@@ -90,11 +97,13 @@
     });
 
     window.addEventListener('keydown', handleGlobalKeydown);
+    window.addEventListener('chasm-rescan', handleRescan);
   });
 
   onDestroy(() => {
     unlisten?.();
     window.removeEventListener('keydown', handleGlobalKeydown);
+    window.removeEventListener('chasm-rescan', handleRescan);
   });
 
   const showDetail = $derived($selectedSessionId !== null || $selectedGroupKey !== null);

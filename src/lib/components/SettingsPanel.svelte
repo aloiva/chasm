@@ -59,6 +59,7 @@
       await invoke('set_copilot_cli_path', { path: copilotPath });
       updateSetting('copilotCliPath', copilotPath);
       pathStatus = 'saved';
+      window.dispatchEvent(new CustomEvent('chasm-rescan'));
     } catch (e: any) {
       pathStatus = 'error';
       pathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
@@ -81,6 +82,7 @@
       await invoke('set_copilot_db_path', { path: copilotDbPath });
       updateSetting('copilotDbPath', copilotDbPath);
       dbPathStatus = 'saved';
+      window.dispatchEvent(new CustomEvent('chasm-rescan'));
     } catch (e: any) {
       dbPathStatus = 'error';
       dbPathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
@@ -146,7 +148,7 @@
           <button class="path-btn path-reset" onclick={resetCopilotPath} title="Reset to default">Reset</button>
         </div>
         {#if pathStatus === 'saved'}
-          <span class="path-status saved">✓ Saved — refresh to reload sessions</span>
+          <span class="path-status saved">✓ Applied</span>
         {:else if pathStatus === 'error'}
           <span class="path-status error">{pathError}</span>
         {/if}
@@ -168,7 +170,7 @@
           <button class="path-btn path-reset" onclick={resetCopilotDbPath} title="Reset to default">Reset</button>
         </div>
         {#if dbPathStatus === 'saved'}
-          <span class="path-status saved">✓ Saved — refresh to reload sessions</span>
+          <span class="path-status saved">✓ Applied</span>
         {:else if dbPathStatus === 'error'}
           <span class="path-status error">{dbPathError}</span>
         {/if}
