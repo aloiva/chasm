@@ -9,35 +9,45 @@ use std::path::PathBuf;
 /// Source adapter for GitHub Copilot CLI sessions.
 ///
 /// Data sources:
-/// - ~/.copilot/session-store.db (SQLite) — sessions, turns, checkpoints, files
-/// - ~/.copilot/session-state/{id}/workspace.yaml — summary, cwd, timestamps
-/// - ~/.copilot/session-state/{id}/events.jsonl — full event stream (lazy-loaded)
+/// - session_state_dir (default: ~/.copilot/session-state/) — session folders with workspace.yaml, events.jsonl
+/// - db_path (default: ~/.copilot/session-store.db) — SQLite DB with sessions, turns, checkpoints, files
 pub struct CopilotCliSource {
-    copilot_dir: PathBuf,
+    session_state_dir: PathBuf,
+    db_file: PathBuf,
 }
 
 impl CopilotCliSource {
     pub fn new() -> Self {
         let home = dirs::home_dir().unwrap_or_default();
+        let copilot_dir = home.join(".copilot");
         Self {
-            copilot_dir: home.join(".copilot"),
+            session_state_dir: copilot_dir.join("session-state"),
+            db_file: copilot_dir.join("session-store.db"),
         }
     }
 
-    pub fn set_copilot_dir(&mut self, path: PathBuf) {
-        self.copilot_dir = path;
+    pub fn set_session_state_dir(&mut self, path: PathBuf) {
+        self.session_state_dir = path;
     }
 
-    pub fn copilot_dir(&self) -> &PathBuf {
-        &self.copilot_dir
+    pub fn set_db_file(&mut self, path: PathBuf) {
+        self.db_file = path;
+    }
+
+    pub fn session_state_dir_path(&self) -> &PathBuf {
+        &self.session_state_dir
+    }
+
+    pub fn db_file_path(&self) -> &PathBuf {
+        &self.db_file
     }
 
     fn db_path(&self) -> PathBuf {
-        self.copilot_dir.join("session-store.db")
+        self.db_file.clone()
     }
 
     fn session_state_dir(&self) -> PathBuf {
-        self.copilot_dir.join("session-state")
+        self.session_state_dir.clone()
     }
 
     fn open_db(&self) -> Result<Connection, SourceError> {

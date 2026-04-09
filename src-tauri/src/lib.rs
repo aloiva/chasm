@@ -312,7 +312,7 @@ fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
         .as_any()
         .downcast_ref::<CopilotCliSource>()
         .ok_or("Downcast failed")?;
-    Ok(cli.copilot_dir().to_string_lossy().to_string())
+    Ok(cli.session_state_dir_path().to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -329,7 +329,36 @@ fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), Stri
     if !pb.exists() {
         return Err(format!("Path does not exist: {}", path));
     }
-    cli.set_copilot_dir(pb);
+    cli.set_session_state_dir(pb);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("copilot-cli").ok_or("Copilot CLI source not found")?;
+    let cli = source
+        .as_any()
+        .downcast_ref::<CopilotCliSource>()
+        .ok_or("Downcast failed")?;
+    Ok(cli.db_file_path().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn set_copilot_db_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("copilot-cli")
+        .ok_or("Copilot CLI source not found")?;
+    let cli = source
+        .as_any_mut()
+        .downcast_mut::<CopilotCliSource>()
+        .ok_or("Downcast failed")?;
+    let pb = std::path::PathBuf::from(&path);
+    if !pb.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    cli.set_db_file(pb);
     Ok(())
 }
 
@@ -404,6 +433,8 @@ pub fn run() {
             reindex_sessions,
             get_copilot_cli_path,
             set_copilot_cli_path,
+            get_copilot_db_path,
+            set_copilot_db_path,
             is_dobby_path,
         ])
         .run(tauri::generate_context!())

@@ -5,7 +5,6 @@
     filteredGroupedSessions,
     filteredSessions,
     viewMode,
-    sources,
     collapsedGroups,
     selectedGroupKey,
     groupFilter,
@@ -19,11 +18,8 @@
   } = $props();
 
   function resolveHeader(key: string): string {
-    if ($viewMode === 'folder' || $viewMode === 'branch' || $viewMode === 'date') {
-      return key;
-    }
-    const info = $sources.find(s => s.name === key);
-    return info?.display_name?.toUpperCase() ?? key.toUpperCase();
+    if ($viewMode === 'source') return key.toUpperCase();
+    return key;
   }
 
   function toggleCollapse(key: string) {

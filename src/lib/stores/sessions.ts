@@ -228,9 +228,15 @@ function weekBucket(dateStr: string | null): string {
 
 // Group sessions by viewMode
 export const groupedSessions = derived(
-  [filteredSessions, viewMode],
-  ([$filtered, $view]) => {
+  [filteredSessions, viewMode, sources],
+  ([$filtered, $view, $sources]) => {
     const groups: Record<string, SessionSummary[]> = {};
+
+    // Build a lookup from internal source name to display name
+    const sourceDisplayMap = new Map<string, string>();
+    for (const src of $sources) {
+      sourceDisplayMap.set(src.name, src.display_name);
+    }
 
     for (const s of $filtered) {
       let key: string;
@@ -245,7 +251,7 @@ export const groupedSessions = derived(
           key = weekBucket(s.updated_at);
           break;
         default:
-          key = s.source;
+          key = sourceDisplayMap.get(s.source) ?? s.source;
       }
       if (!groups[key]) groups[key] = [];
       groups[key].push(s);

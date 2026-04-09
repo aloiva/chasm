@@ -5,26 +5,31 @@
   let open = $state(false);
   let confirmingReindex = $state(false);
   let reindexStatus = $state<'idle' | 'running' | 'done' | 'error'>('idle');
+
   let copilotPath = $state('');
+  let copilotDbPath = $state('');
   let pathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let pathError = $state('');
+  let dbPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let dbPathError = $state('');
 
-  async function loadCopilotPath() {
+  async function loadPaths() {
     try {
-      const saved = $settings.copilotCliPath;
-      if (saved) {
-        copilotPath = saved;
-      } else {
-        copilotPath = await invoke<string>('get_copilot_cli_path');
-      }
+      const savedPath = $settings.copilotCliPath;
+      copilotPath = savedPath || await invoke<string>('get_copilot_cli_path');
     } catch {
       copilotPath = '';
     }
+    try {
+      const savedDb = $settings.copilotDbPath;
+      copilotDbPath = savedDb || await invoke<string>('get_copilot_db_path');
+    } catch {
+      copilotDbPath = '';
+    }
   }
 
-  // Load the path when the component mounts
   $effect(() => {
-    loadCopilotPath();
+    loadPaths();
   });
 
   function toggle() {
@@ -34,6 +39,8 @@
       reindexStatus = 'idle';
       pathStatus = 'idle';
       pathError = '';
+      dbPathStatus = 'idle';
+      dbPathError = '';
     }
   }
 
@@ -60,15 +67,33 @@
 
   async function resetCopilotPath() {
     try {
-      const defaultPath = await invoke<string>('get_copilot_cli_path');
-      copilotPath = defaultPath;
       updateSetting('copilotCliPath', '');
-      await invoke('set_copilot_cli_path', { path: defaultPath });
+      copilotPath = await invoke<string>('get_copilot_cli_path');
       pathStatus = 'idle';
       pathError = '';
-    } catch {
-      // ignore
+    } catch { /* ignore */ }
+  }
+
+  async function saveCopilotDbPath() {
+    dbPathStatus = 'saving';
+    dbPathError = '';
+    try {
+      await invoke('set_copilot_db_path', { path: copilotDbPath });
+      updateSetting('copilotDbPath', copilotDbPath);
+      dbPathStatus = 'saved';
+    } catch (e: any) {
+      dbPathStatus = 'error';
+      dbPathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
     }
+  }
+
+  async function resetCopilotDbPath() {
+    try {
+      updateSetting('copilotDbPath', '');
+      copilotDbPath = await invoke<string>('get_copilot_db_path');
+      dbPathStatus = 'idle';
+      dbPathError = '';
+    } catch { /* ignore */ }
   }
 
   async function runReindex() {
@@ -106,13 +131,13 @@
       </label>
 
       <div class="settings-divider"></div>
-      <div class="settings-header">Copilot CLI Path</div>
+      <div class="settings-header">Copilot CLI Sessions Path</div>
 
       <div class="path-setting">
         <input
           type="text"
           class="path-input"
-          placeholder="~/.copilot, ~/.copilot/history"
+          placeholder="~/.copilot/session-state"
           bind:value={copilotPath}
           onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveCopilotPath(); }}
         />
@@ -124,6 +149,28 @@
           <span class="path-status saved">✓ Saved — refresh to reload sessions</span>
         {:else if pathStatus === 'error'}
           <span class="path-status error">{pathError}</span>
+        {/if}
+      </div>
+
+      <div class="settings-divider"></div>
+      <div class="settings-header">Session Store DB Path</div>
+
+      <div class="path-setting">
+        <input
+          type="text"
+          class="path-input"
+          placeholder="~/.copilot/session-store.db"
+          bind:value={copilotDbPath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveCopilotDbPath(); }}
+        />
+        <div class="path-actions">
+          <button class="path-btn" onclick={saveCopilotDbPath} title="Apply path">Apply</button>
+          <button class="path-btn path-reset" onclick={resetCopilotDbPath} title="Reset to default">Reset</button>
+        </div>
+        {#if dbPathStatus === 'saved'}
+          <span class="path-status saved">✓ Saved — refresh to reload sessions</span>
+        {:else if dbPathStatus === 'error'}
+          <span class="path-status error">{dbPathError}</span>
         {/if}
       </div>
 
