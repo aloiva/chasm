@@ -6,6 +6,8 @@ export const sessions = writable<SessionSummary[]>([]);
 export const sources = writable<SourceInfo[]>([]);
 export const loading = writable(false);
 export const searchQuery = writable('');
+/** Session IDs whose turn messages matched the current search query (set by backend) */
+export const messageMatchIds = writable<Set<string>>(new Set());
 export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source'>('updated');
 export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
 export const selectedSessionId = writable<string | null>(null);
@@ -119,8 +121,8 @@ export const activeFilterCount = derived(filters, ($f) => {
 });
 
 export const filteredSessions = derived(
-  [sessions, searchQuery, sortBy, filters, pinnedSessions],
-  ([$sessions, $query, $sort, $filters, $pinned]) => {
+  [sessions, searchQuery, sortBy, filters, pinnedSessions, messageMatchIds],
+  ([$sessions, $query, $sort, $filters, $pinned, $msgIds]) => {
     let result = $sessions;
 
     // Filter by search query — comma-separated terms with operators, OR logic
@@ -131,7 +133,8 @@ export const filteredSessions = derived(
           // Test each field independently so startswith=/endswith= work per-field
           const fields = [s.title, s.first_message, s.cwd, s.branch, s.id]
             .map(v => v ?? '');
-          return matchers.some(m => fields.some(f => m(f)));
+          // Match metadata OR message content (from backend search)
+          return matchers.some(m => fields.some(f => m(f))) || $msgIds.has(s.id);
         });
       }
     }

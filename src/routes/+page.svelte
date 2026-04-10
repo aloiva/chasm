@@ -8,7 +8,7 @@
   import GroupDetail from '$lib/components/GroupDetail.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import GroupContextMenu from '$lib/components/GroupContextMenu.svelte';
-  import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin } from '$lib/stores/sessions';
+  import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin, searchQuery, messageMatchIds } from '$lib/stores/sessions';
   import { settings } from '$lib/stores/settings';
   import type { SessionSummary } from '$lib/types/session';
 
@@ -18,6 +18,8 @@
   let renameValue = $state('');
   let deleteConfirm = $state<SessionSummary | null>(null);
   let unlisten: (() => void) | null = null;
+  let msgSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  let unsubSearch: (() => void) | null = null;
 
   // Resizable sidebar
   let sidebarWidth = $state(400);
@@ -98,10 +100,30 @@
 
     window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('chasm-rescan', handleRescan);
+
+    // Debounced message search: query the backend for turn content matches
+    unsubSearch = searchQuery.subscribe((q) => {
+      if (msgSearchTimer) clearTimeout(msgSearchTimer);
+      const trimmed = q.trim();
+      if (!trimmed) {
+        messageMatchIds.set(new Set());
+        return;
+      }
+      msgSearchTimer = setTimeout(async () => {
+        try {
+          const ids: string[] = await invoke('search_messages', { query: trimmed });
+          messageMatchIds.set(new Set(ids));
+        } catch {
+          messageMatchIds.set(new Set());
+        }
+      }, 300);
+    });
   });
 
   onDestroy(() => {
     unlisten?.();
+    unsubSearch?.();
+    if (msgSearchTimer) clearTimeout(msgSearchTimer);
     window.removeEventListener('keydown', handleGlobalKeydown);
     window.removeEventListener('chasm-rescan', handleRescan);
   });

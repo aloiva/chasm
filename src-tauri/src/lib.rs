@@ -225,6 +225,12 @@ fn reindex_sessions() -> Result<String, String> {
 /// `session_type` is "cli" (Copilot CLI) or "dobby".
 /// If `path` is empty, defaults to the current user's home directory.
 #[tauri::command]
+fn search_messages(state: State<AppState>, query: String) -> Result<Vec<String>, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    Ok(registry.search_turns(&query))
+}
+
+#[tauri::command]
 fn new_session(path: String, session_type: String) -> Result<String, String> {
     let mut work_dir = if path.is_empty() {
         dirs::home_dir()
@@ -453,6 +459,7 @@ pub fn run() {
             delete_sessions,
             resume_session,
             open_folder,
+            search_messages,
             new_session,
             get_available_sources,
             reindex_sessions,

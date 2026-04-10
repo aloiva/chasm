@@ -214,4 +214,17 @@ impl SourceRegistry {
 
         (all_sessions, warnings)
     }
+
+    /// Search turn messages across all sources that support it.
+    pub fn search_turns(&self, query: &str) -> Vec<String> {
+        let mut ids = Vec::new();
+        for source in &self.sources {
+            if let Some(cli) = source.as_any().downcast_ref::<copilot_cli::CopilotCliSource>() {
+                ids.extend(cli.search_turns(query));
+            }
+        }
+        ids.sort();
+        ids.dedup();
+        ids
+    }
 }

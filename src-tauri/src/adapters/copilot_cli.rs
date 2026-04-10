@@ -75,6 +75,30 @@ impl CopilotCliSource {
         None
     }
 
+    /// Search turn messages for a query string, returning matching session IDs.
+    pub fn search_turns(&self, query: &str) -> Vec<String> {
+        let conns = self.open_dbs();
+        let pattern = format!("%{}%", query);
+        let mut ids = Vec::new();
+        for conn in &conns {
+            let mut stmt = match conn.prepare(
+                "SELECT DISTINCT session_id FROM turns
+                 WHERE user_message LIKE ?1 OR assistant_response LIKE ?1"
+            ) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let rows: Vec<String> = stmt
+                .query_map([&pattern], |row| row.get::<_, String>(0))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .collect();
+            ids.extend(rows);
+        }
+        ids
+    }
+
     /// Get the primary session_state_dir (first in list, used for storage_path fallback).
     fn primary_session_state_dir(&self) -> PathBuf {
         self.session_state_dirs.first().cloned().unwrap_or_default()
