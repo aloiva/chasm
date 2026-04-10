@@ -48,7 +48,7 @@ Right-click any session for quick actions:
 Click any group header to open the group detail panel. The **+ New Session** button launches a fresh session in the context of that group:
 
 - In **Folder view** — the new session opens in the selected folder's working directory
-- Clicking the button shows a type picker: **Copilot CLI** (always available) or **Dobby** (shown only when the folder contains a Dobby agent with `Start-Copilot.ps1`)
+- Clicking the button shows a type picker: **Copilot CLI** (always available) or **Dobby** (shown only when the folder `.\..` contains a Dobby agent with `Start-Copilot.ps1`, i.e the current folder must be `_agent-cli`.)
 - The session opens in a new PowerShell terminal window, independent of chasm
 - If no folder context is available (e.g. Source or Date view), defaults to the user's home directory
 
