@@ -18,7 +18,7 @@ use std::os::windows::process::CommandExt;
 
 struct AppState {
     registry: Mutex<SourceRegistry>,
-    agentviz_processes: Mutex<Vec<Child>>,
+    agentviz_processes: Mutex<Vec<(u16, Child)>>,
 }
 
 #[tauri::command]
@@ -423,12 +423,15 @@ fn validate_agentviz_path(path: String) -> Result<(), String> {
 
 /// Open a session in agentviz (browser mode).
 /// Resolves the session's events.jsonl from source+id, spawns `node bin/agentviz.js <path>`.
+/// Enforces a port range: assigns a free port, or evicts the oldest process if all ports are taken.
 #[tauri::command]
 fn open_agentviz(
     state: State<AppState>,
     agentviz_path: String,
     source: String,
     id: String,
+    port_start: u16,
+    port_end: u16,
 ) -> Result<String, String> {
     // Validate agentviz installation
     validate_agentviz_path(agentviz_path.clone())?;
@@ -457,15 +460,32 @@ fn open_agentviz(
         .join("bin")
         .join("agentviz.js");
 
-    // Prune finished processes before spawning a new one
     let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
-    processes.retain_mut(|child| child.try_wait().ok().flatten().is_none());
+
+    // Prune finished processes
+    processes.retain_mut(|(_, child)| child.try_wait().ok().flatten().is_none());
+
+    // Find a free port in the range
+    let used_ports: Vec<u16> = processes.iter().map(|(p, _)| *p).collect();
+    let port = (port_start..=port_end)
+        .find(|p| !used_ports.contains(p))
+        .unwrap_or_else(|| {
+            // All ports taken — evict the oldest (first in vec)
+            if let Some((evicted_port, mut child)) = processes.drain(..1).next() {
+                let _ = child.kill();
+                evicted_port
+            } else {
+                port_start
+            }
+        });
 
     #[cfg(windows)]
     let child = {
         StdCommand::new("node")
             .arg(script.to_string_lossy().to_string())
             .arg(&target)
+            .arg("--port")
+            .arg(port.to_string())
             .current_dir(&agentviz_path)
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .spawn()
@@ -483,6 +503,8 @@ fn open_agentviz(
         StdCommand::new("node")
             .arg(script.to_string_lossy().to_string())
             .arg(&target)
+            .arg("--port")
+            .arg(port.to_string())
             .current_dir(&agentviz_path)
             .spawn()
             .map_err(|e| {
@@ -494,10 +516,9 @@ fn open_agentviz(
             })?
     };
 
-    let pid = child.id();
-    processes.push(child);
+    processes.push((port, child));
 
-    Ok(format!("agentviz started (PID {})", pid))
+    Ok(format!("http://localhost:{}", port))
 }
 
 /// Kill all tracked agentviz processes.
@@ -505,7 +526,7 @@ fn open_agentviz(
 fn close_all_agentviz(state: State<AppState>) -> Result<String, String> {
     let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
     let mut killed = 0;
-    for child in processes.iter_mut() {
+    for (_, child) in processes.iter_mut() {
         if child.try_wait().ok().flatten().is_none() {
             let _ = child.kill();
             killed += 1;
@@ -594,7 +615,7 @@ pub fn run() {
                 let state = app.state::<AppState>();
                 let processes = state.agentviz_processes.lock();
                 if let Ok(mut processes) = processes {
-                    for child in processes.iter_mut() {
+                    for (_, child) in processes.iter_mut() {
                         let _ = child.kill();
                     }
                     processes.clear();

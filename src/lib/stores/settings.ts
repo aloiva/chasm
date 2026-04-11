@@ -4,6 +4,8 @@ export interface AppSettings {
   enableDobby: boolean;
   enableAgentviz: boolean;
   agentvizPath: string;
+  agentvizPortStart: number;
+  agentvizPortEnd: number;
   copilotCliPath: string;
   copilotDbPath: string;
 }
@@ -14,6 +16,8 @@ const defaultSettings: AppSettings = {
   enableDobby: false,
   enableAgentviz: false,
   agentvizPath: '',
+  agentvizPortStart: 4242,
+  agentvizPortEnd: 4244,
   copilotCliPath: '',
   copilotDbPath: '',
 };

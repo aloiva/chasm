@@ -16,6 +16,17 @@
   let agentvizPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let agentvizPathError = $state('');
 
+  // Setup popup state
+  let showAgentvizSetup = $state(false);
+  let setupPath = $state('');
+  let setupPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let setupPathError = $state('');
+
+  // Port range state
+  let portStart = $state(4242);
+  let portEnd = $state(4244);
+  let portWarning = $state(false);
+
   async function loadPaths() {
     try {
       const savedPath = $settings.copilotCliPath;
@@ -30,6 +41,8 @@
       copilotDbPath = '';
     }
     agentvizPath = $settings.agentvizPath || '';
+    portStart = $settings.agentvizPortStart;
+    portEnd = $settings.agentvizPortEnd;
   }
 
   $effect(() => {
@@ -50,10 +63,47 @@
 
   function handleClickOutside(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (!target.closest('.settings-container')) {
+    if (!target.closest('.settings-container') && !target.closest('.modal-overlay')) {
       open = false;
       confirmingReindex = false;
     }
+  }
+
+  function handleEnableAgentviz() {
+    if ($settings.enableAgentviz) {
+      // Turning off
+      updateSetting('enableAgentviz', false);
+    } else {
+      // Turning on — show setup popup if no path configured
+      if (!$settings.agentvizPath) {
+        setupPath = '';
+        setupPathStatus = 'idle';
+        setupPathError = '';
+        showAgentvizSetup = true;
+      } else {
+        updateSetting('enableAgentviz', true);
+      }
+    }
+  }
+
+  async function confirmSetup() {
+    setupPathStatus = 'saving';
+    setupPathError = '';
+    try {
+      await invoke('validate_agentviz_path', { path: setupPath });
+      updateSetting('agentvizPath', setupPath);
+      updateSetting('enableAgentviz', true);
+      agentvizPath = setupPath;
+      agentvizPathStatus = 'idle';
+      showAgentvizSetup = false;
+    } catch (e: any) {
+      setupPathStatus = 'error';
+      setupPathError = typeof e === 'string' ? e : e?.message || 'Invalid path';
+    }
+  }
+
+  function cancelSetup() {
+    showAgentvizSetup = false;
   }
 
   async function saveCopilotPath() {
@@ -122,6 +172,21 @@
     agentvizPathError = '';
   }
 
+  async function applyPortRange() {
+    if (portStart > portEnd || portStart < 1024 || portEnd > 65535) return;
+    try {
+      await invoke('close_all_agentviz');
+    } catch { /* ignore */ }
+    updateSetting('agentvizPortStart', portStart);
+    updateSetting('agentvizPortEnd', portEnd);
+    portWarning = false;
+  }
+
+  function onPortChange() {
+    const changed = portStart !== $settings.agentvizPortStart || portEnd !== $settings.agentvizPortEnd;
+    portWarning = changed;
+  }
+
   async function runReindex() {
     reindexStatus = 'running';
     try {
@@ -160,17 +225,13 @@
         <input
           type="checkbox"
           checked={$settings.enableAgentviz}
-          onchange={() => updateSetting('enableAgentviz', !$settings.enableAgentviz)}
+          onchange={handleEnableAgentviz}
         />
         <span class="setting-label">Enable agentviz</span>
       </label>
 
       {#if $settings.enableAgentviz}
         <div class="path-setting">
-          <div class="setup-hint">
-            <code>git clone https://github.com/jayparikh/agentviz</code><br/>
-            <code>cd agentviz && npm install && npm run build</code>
-          </div>
           <input
             type="text"
             class="path-input"
@@ -186,6 +247,36 @@
             <span class="path-status saved">✓ Applied</span>
           {:else if agentvizPathStatus === 'error'}
             <span class="path-status error">{agentvizPathError}</span>
+          {/if}
+        </div>
+
+        <div class="path-setting">
+          <label class="port-label">Port range</label>
+          <div class="port-range-row">
+            <input
+              type="number"
+              class="port-input"
+              min="1024"
+              max="65535"
+              bind:value={portStart}
+              oninput={onPortChange}
+            />
+            <span class="port-dash">–</span>
+            <input
+              type="number"
+              class="port-input"
+              min="1024"
+              max="65535"
+              bind:value={portEnd}
+              oninput={onPortChange}
+            />
+            <span class="port-slots">({portEnd - portStart + 1} slots)</span>
+          </div>
+          {#if portWarning}
+            <div class="port-warning">
+              <span>⚠ Changing ports will close all running agentviz sessions.</span>
+              <button class="path-btn" onclick={applyPortRange}>Apply</button>
+            </div>
           {/if}
         </div>
       {/if}
@@ -258,6 +349,37 @@
     </div>
   {/if}
 </div>
+
+{#if showAgentvizSetup}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={cancelSetup}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal-content" onclick={(e: MouseEvent) => e.stopPropagation()}>
+      <div class="modal-header">Set up agentviz</div>
+      <div class="modal-body">
+        <p class="modal-instructions">Clone and build agentviz, then enter the path below:</p>
+        <div class="modal-commands">
+          <code>git clone https://github.com/jayparikh/agentviz</code>
+          <code>cd agentviz && npm install && npm run build</code>
+        </div>
+        <input
+          type="text"
+          class="path-input"
+          placeholder="C:\dev\repos\agentviz"
+          bind:value={setupPath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') confirmSetup(); }}
+        />
+        {#if setupPathStatus === 'error'}
+          <span class="path-status error">{setupPathError}</span>
+        {/if}
+      </div>
+      <div class="modal-actions">
+        <button class="confirm-btn confirm-yes" onclick={confirmSetup}>Apply</button>
+        <button class="confirm-btn confirm-no" onclick={cancelSetup}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .settings-container {
@@ -463,18 +585,113 @@
     color: var(--danger);
   }
 
-  .setup-hint {
-    font-size: 11px;
+  .port-label {
+    font-size: var(--font-size-small);
     font-family: var(--font-mono);
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .port-range-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .port-input {
+    width: 70px;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+  }
+  .port-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .port-dash {
+    color: var(--text-secondary);
+  }
+
+  .port-slots {
+    font-size: 11px;
     color: var(--text-muted);
-    margin-bottom: 6px;
-    line-height: 1.6;
+    font-family: var(--font-mono);
+  }
+
+  .port-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--warning, #e5c07b);
+    font-family: var(--font-mono);
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+
+  .modal-content {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    min-width: 360px;
+    max-width: 440px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  .modal-body {
+    margin-bottom: 12px;
+  }
+
+  .modal-instructions {
+    font-size: var(--font-size-small);
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    line-height: 1.4;
+  }
+
+  .modal-commands {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
     user-select: all;
   }
-  .setup-hint code {
+  .modal-commands code {
+    font-size: 11px;
+    font-family: var(--font-mono);
     color: var(--text-secondary);
     background: var(--bg-primary);
-    padding: 1px 4px;
+    padding: 3px 6px;
     border-radius: 2px;
+    display: block;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
   }
 </style>
