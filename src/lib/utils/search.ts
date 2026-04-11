@@ -24,6 +24,15 @@
 
 export type Matcher = (text: string) => boolean;
 
+/**
+ * Structured search expression tree.
+ * Used by multi-field search so AND terms can match across different fields.
+ */
+export type SearchExpr =
+  | { type: 'term'; matcher: Matcher }
+  | { type: 'and'; parts: SearchExpr[] }
+  | { type: 'or'; parts: SearchExpr[] };
+
 /** Parse a single search term into a Matcher function. */
 function parseTerm(raw: string): Matcher {
   const term = raw.trim();
@@ -143,7 +152,47 @@ function parsePrimary(tokens: string[], pos: { i: number }): Matcher {
 }
 
 /**
- * Parse a search string into an array of Matchers.
+ * Parse into a SearchExpr tree — used by multi-field search so AND terms
+ * can match across different fields.
+ */
+function parseExprTree(tokens: string[], pos: { i: number }): SearchExpr {
+  while (pos.i < tokens.length && tokens[pos.i] === ',') pos.i++;
+  if (pos.i >= tokens.length) return { type: 'term', matcher: () => true };
+  const orParts: SearchExpr[] = [parseAndExprTree(tokens, pos)];
+  while (pos.i < tokens.length && tokens[pos.i] === ',') {
+    pos.i++;
+    while (pos.i < tokens.length && tokens[pos.i] === ',') pos.i++;
+    if (pos.i < tokens.length && tokens[pos.i] !== ')') {
+      orParts.push(parseAndExprTree(tokens, pos));
+    }
+  }
+  return orParts.length === 1 ? orParts[0] : { type: 'or', parts: orParts };
+}
+
+function parseAndExprTree(tokens: string[], pos: { i: number }): SearchExpr {
+  const andParts: SearchExpr[] = [parsePrimaryTree(tokens, pos)];
+  while (pos.i < tokens.length && tokens[pos.i] === '+') {
+    pos.i++;
+    andParts.push(parsePrimaryTree(tokens, pos));
+  }
+  return andParts.length === 1 ? andParts[0] : { type: 'and', parts: andParts };
+}
+
+function parsePrimaryTree(tokens: string[], pos: { i: number }): SearchExpr {
+  if (pos.i >= tokens.length) return { type: 'term', matcher: () => true };
+  const tok = tokens[pos.i];
+  if (tok === ',' || tok === '+' || tok === ')') return { type: 'term', matcher: () => true };
+  if (tok === '(') {
+    pos.i++;
+    const expr = parseExprTree(tokens, pos);
+    if (pos.i < tokens.length && tokens[pos.i] === ')') pos.i++;
+    return expr;
+  }
+  return { type: 'term', matcher: parseTerm(tokens[pos.i++]) };
+}
+
+/**
+ * Parse a search string into an array of Matchers (single-field matching).
  * Comma = OR, + = AND, parentheses for grouping.
  * Returns empty array if input is blank.
  */
@@ -154,6 +203,35 @@ export function parseSearchTerms(input: string): Matcher[] {
   const pos = { i: 0 };
   const matcher = parseExpr(tokens, pos);
   return [matcher];
+}
+
+/**
+ * Parse a search string into a SearchExpr tree for multi-field matching.
+ * AND terms can match across different fields.
+ */
+export function parseSearchExpr(input: string): SearchExpr | null {
+  if (!input.trim()) return null;
+  const tokens = tokenize(input);
+  if (tokens.length === 0) return null;
+  const pos = { i: 0 };
+  return parseExprTree(tokens, pos);
+}
+
+/**
+ * Evaluate a SearchExpr against multiple fields.
+ * AND: each part must match at least one field (different parts can match different fields).
+ * OR: any part matching any field is sufficient.
+ * Term: must match at least one field.
+ */
+export function matchesMultiField(expr: SearchExpr, fields: string[]): boolean {
+  switch (expr.type) {
+    case 'term':
+      return fields.some(f => expr.matcher(f));
+    case 'and':
+      return expr.parts.every(part => matchesMultiField(part, fields));
+    case 'or':
+      return expr.parts.some(part => matchesMultiField(part, fields));
+  }
 }
 
 /**

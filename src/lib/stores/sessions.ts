@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { SessionSummary, SourceInfo } from '$lib/types/session';
-import { parseSearchTerms, matchesAny } from '$lib/utils/search';
+import { parseSearchTerms, matchesAny, parseSearchExpr, matchesMultiField } from '$lib/utils/search';
 
 export const sessions = writable<SessionSummary[]>([]);
 export const sources = writable<SourceInfo[]>([]);
@@ -125,16 +125,14 @@ export const filteredSessions = derived(
   ([$sessions, $query, $sort, $filters, $pinned, $msgIds]) => {
     let result = $sessions;
 
-    // Filter by search query — comma-separated terms with operators, OR logic
+    // Filter by search query — multi-field: AND terms can match across different fields
     if ($query.trim()) {
-      const matchers = parseSearchTerms($query);
-      if (matchers.length > 0) {
+      const expr = parseSearchExpr($query);
+      if (expr) {
         result = result.filter(s => {
-          // Test each field independently so startswith=/endswith= work per-field
           const fields = [s.title, s.first_message, s.cwd, s.branch, s.id]
             .map(v => v ?? '');
-          // Match metadata OR message content (from backend search)
-          return matchers.some(m => fields.some(f => m(f))) || $msgIds.has(s.id);
+          return matchesMultiField(expr, fields) || $msgIds.has(s.id);
         });
       }
     }
