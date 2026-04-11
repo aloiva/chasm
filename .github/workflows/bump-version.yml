@@ -69,7 +69,7 @@ jobs:
 
       - name: Update Cargo.toml
         run: |
-          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.new }}"/' src-tauri/Cargo.toml
+          sed -i '/^\[package\]/,/^\[/ s/^version = ".*"/version = "${{ steps.version.outputs.new }}"/' src-tauri/Cargo.toml
 
       - name: Commit and push release branch
         run: |
@@ -90,6 +90,8 @@ jobs:
             --base main \
             --head release/v${{ steps.version.outputs.new }}
 
+      # Pushing the tag triggers the Build & Release workflow (release.yml).
+      # The tag points to the version-bumped commit on the release branch.
       - name: Create and push version tag
         run: |
           git tag v${{ steps.version.outputs.new }}
