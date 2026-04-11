@@ -41,10 +41,15 @@ The GitHub Actions workflow builds on `windows-latest` and attaches installers t
 
 ### release notes
 
-The workflow accepts an optional **release_notes** input when triggered manually via `workflow_dispatch`. To include release notes:
+Release notes are added after the build completes using the GitHub CLI:
 
-1. Go to **Actions → Build & Release → Run workflow**
-2. Fill in the **Release notes** text field (supports markdown, use `\n` for line breaks)
-3. Click **Run workflow**
+```bash
+gh release edit v0.4.0 --notes "## What's New
+- Feature one
+- Feature two
 
-If provided, a "What's New" section appears above the Downloads section in the release. If left empty, only the Downloads section is shown.
+### Downloads
+..."
+```
+
+Or edit directly on the GitHub Releases page.
