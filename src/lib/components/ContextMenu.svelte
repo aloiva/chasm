@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SessionSummary } from '$lib/types/session';
   import { pinnedSessions } from '$lib/stores/sessions';
+  import { settings } from '$lib/stores/settings';
 
   let {
     session,
@@ -14,6 +15,7 @@
     oncopyid,
     onopenfiles,
     onpin,
+    onagentviz,
   }: {
     session: SessionSummary;
     x: number;
@@ -26,6 +28,7 @@
     oncopyid: (session: SessionSummary) => void;
     onopenfiles: (session: SessionSummary) => void;
     onpin: (session: SessionSummary) => void;
+    onagentviz: (session: SessionSummary) => void;
   } = $props();
 
   // Clamp menu position so it doesn't overflow the viewport
@@ -81,6 +84,15 @@
     >
       <span class="icon">▶</span> Resume
     </button>
+
+    {#if $settings.enableAgentviz && $settings.agentvizPath && !isDeleted && session.storage_path}
+      <button
+        class="menu-item"
+        onclick={() => handleAction(() => onagentviz(session))}
+      >
+        <span class="icon">◇</span> Open in agentviz
+      </button>
+    {/if}
 
     <div class="divider"></div>
 

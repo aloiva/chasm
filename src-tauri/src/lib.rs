@@ -7,6 +7,8 @@ use adapters::{
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
+use std::process::Child;
+use tauri::Manager;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, State};
@@ -16,6 +18,7 @@ use std::os::windows::process::CommandExt;
 
 struct AppState {
     registry: Mutex<SourceRegistry>,
+    agentviz_processes: Mutex<Vec<Child>>,
 }
 
 #[tauri::command]
@@ -402,6 +405,116 @@ fn is_dobby_path(path: String) -> bool {
     parent.join("Start-Copilot.ps1").exists()
 }
 
+/// Validate that an agentviz path contains the built app (bin/agentviz.js + dist/index.html).
+#[tauri::command]
+fn validate_agentviz_path(path: String) -> Result<(), String> {
+    let root = PathBuf::from(&path);
+    if !root.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    if !root.join("bin").join("agentviz.js").exists() {
+        return Err("bin/agentviz.js not found. Is this the agentviz repo?".to_string());
+    }
+    if !root.join("dist").join("index.html").exists() {
+        return Err("dist/index.html not found. Run: npm run build".to_string());
+    }
+    Ok(())
+}
+
+/// Open a session in agentviz (browser mode).
+/// Resolves the session's events.jsonl from source+id, spawns `node bin/agentviz.js <path>`.
+#[tauri::command]
+fn open_agentviz(
+    state: State<AppState>,
+    agentviz_path: String,
+    source: String,
+    id: String,
+) -> Result<String, String> {
+    // Validate agentviz installation
+    validate_agentviz_path(agentviz_path.clone())?;
+
+    // Resolve session path via the adapter
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let adapter = registry
+        .get_source(&source)
+        .ok_or_else(|| format!("Source '{}' not found", source))?;
+    let detail = adapter.load_detail(&id).map_err(|e| e.to_string())?;
+    let storage_path = detail
+        .summary
+        .storage_path
+        .ok_or("Session has no storage path")?;
+
+    // Look for events.jsonl inside the storage path
+    let session_dir = PathBuf::from(&storage_path);
+    let events_file = session_dir.join("events.jsonl");
+    let target = if events_file.exists() {
+        events_file.to_string_lossy().to_string()
+    } else {
+        storage_path
+    };
+
+    let script = PathBuf::from(&agentviz_path)
+        .join("bin")
+        .join("agentviz.js");
+
+    // Prune finished processes before spawning a new one
+    let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
+    processes.retain_mut(|child| child.try_wait().ok().flatten().is_none());
+
+    #[cfg(windows)]
+    let child = {
+        StdCommand::new("node")
+            .arg(script.to_string_lossy().to_string())
+            .arg(&target)
+            .current_dir(&agentviz_path)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    "Node.js not found. Make sure 'node' is on your PATH.".to_string()
+                } else {
+                    format!("Failed to start agentviz: {}", e)
+                }
+            })?
+    };
+
+    #[cfg(not(windows))]
+    let child = {
+        StdCommand::new("node")
+            .arg(script.to_string_lossy().to_string())
+            .arg(&target)
+            .current_dir(&agentviz_path)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    "Node.js not found. Make sure 'node' is on your PATH.".to_string()
+                } else {
+                    format!("Failed to start agentviz: {}", e)
+                }
+            })?
+    };
+
+    let pid = child.id();
+    processes.push(child);
+
+    Ok(format!("agentviz started (PID {})", pid))
+}
+
+/// Kill all tracked agentviz processes.
+#[tauri::command]
+fn close_all_agentviz(state: State<AppState>) -> Result<String, String> {
+    let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
+    let mut killed = 0;
+    for child in processes.iter_mut() {
+        if child.try_wait().ok().flatten().is_none() {
+            let _ = child.kill();
+            killed += 1;
+        }
+    }
+    processes.clear();
+    Ok(format!("Closed {} agentviz instance(s)", killed))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut registry = SourceRegistry::new();
@@ -421,6 +534,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             registry: Mutex::new(registry),
+            agentviz_processes: Mutex::new(Vec::new()),
         })
         .setup(move |app| {
             // Set up filesystem watcher with debounce
@@ -468,7 +582,23 @@ pub fn run() {
             get_copilot_db_path,
             set_copilot_db_path,
             is_dobby_path,
+            validate_agentviz_path,
+            open_agentviz,
+            close_all_agentviz,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Kill all tracked agentviz processes on app exit
+                let state = app.state::<AppState>();
+                let processes = state.agentviz_processes.lock();
+                if let Ok(mut processes) = processes {
+                    for child in processes.iter_mut() {
+                        let _ = child.kill();
+                    }
+                    processes.clear();
+                }
+            }
+        });
 }

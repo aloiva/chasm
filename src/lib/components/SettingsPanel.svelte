@@ -12,6 +12,9 @@
   let pathError = $state('');
   let dbPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let dbPathError = $state('');
+  let agentvizPath = $state('');
+  let agentvizPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let agentvizPathError = $state('');
 
   async function loadPaths() {
     try {
@@ -26,6 +29,7 @@
     } catch {
       copilotDbPath = '';
     }
+    agentvizPath = $settings.agentvizPath || '';
   }
 
   $effect(() => {
@@ -98,6 +102,26 @@
     } catch { /* ignore */ }
   }
 
+  async function saveAgentvizPath() {
+    agentvizPathStatus = 'saving';
+    agentvizPathError = '';
+    try {
+      await invoke('validate_agentviz_path', { path: agentvizPath });
+      updateSetting('agentvizPath', agentvizPath);
+      agentvizPathStatus = 'saved';
+    } catch (e: any) {
+      agentvizPathStatus = 'error';
+      agentvizPathError = typeof e === 'string' ? e : e?.message || 'Invalid path';
+    }
+  }
+
+  function resetAgentvizPath() {
+    updateSetting('agentvizPath', '');
+    agentvizPath = '';
+    agentvizPathStatus = 'idle';
+    agentvizPathError = '';
+  }
+
   async function runReindex() {
     reindexStatus = 'running';
     try {
@@ -131,6 +155,40 @@
         />
         <span class="setting-label">Enable Dobby</span>
       </label>
+
+      <label class="setting-row">
+        <input
+          type="checkbox"
+          checked={$settings.enableAgentviz}
+          onchange={() => updateSetting('enableAgentviz', !$settings.enableAgentviz)}
+        />
+        <span class="setting-label">Enable agentviz</span>
+      </label>
+
+      {#if $settings.enableAgentviz}
+        <div class="path-setting">
+          <div class="setup-hint">
+            <code>git clone https://github.com/jayparikh/agentviz</code><br/>
+            <code>cd agentviz && npm install && npm run build</code>
+          </div>
+          <input
+            type="text"
+            class="path-input"
+            placeholder="C:\dev\repos\agentviz"
+            bind:value={agentvizPath}
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveAgentvizPath(); }}
+          />
+          <div class="path-actions">
+            <button class="path-btn" onclick={saveAgentvizPath} title="Apply path">Apply</button>
+            <button class="path-btn path-reset" onclick={resetAgentvizPath} title="Clear path">Reset</button>
+          </div>
+          {#if agentvizPathStatus === 'saved'}
+            <span class="path-status saved">✓ Applied</span>
+          {:else if agentvizPathStatus === 'error'}
+            <span class="path-status error">{agentvizPathError}</span>
+          {/if}
+        </div>
+      {/if}
 
       <div class="settings-divider"></div>
       <div class="settings-header">Copilot CLI Sessions Path</div>
@@ -403,5 +461,20 @@
   }
   .path-status.error {
     color: var(--danger);
+  }
+
+  .setup-hint {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    line-height: 1.6;
+    user-select: all;
+  }
+  .setup-hint code {
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    padding: 1px 4px;
+    border-radius: 2px;
   }
 </style>

@@ -179,6 +179,18 @@
     }
   }
 
+  async function handleOpenAgentviz(session: SessionSummary) {
+    try {
+      await invoke('open_agentviz', {
+        agentvizPath: $settings.agentvizPath,
+        source: session.source,
+        id: session.id,
+      });
+    } catch (e: any) {
+      console.error('agentviz failed:', e);
+    }
+  }
+
   function handleRenameStart(session: SessionSummary) {
     renameTarget = session;
     renameValue = session.title ?? '';
@@ -287,6 +299,7 @@
     onresume={handleResume}
     onrename={handleRenameStart}
     ondelete={handleDeleteStart}
+    onagentviz={handleOpenAgentviz}
   />
 {/if}
 

@@ -2,6 +2,8 @@ import { writable } from 'svelte/store';
 
 export interface AppSettings {
   enableDobby: boolean;
+  enableAgentviz: boolean;
+  agentvizPath: string;
   copilotCliPath: string;
   copilotDbPath: string;
 }
@@ -10,6 +12,8 @@ const STORAGE_KEY = 'chasm-settings';
 
 const defaultSettings: AppSettings = {
   enableDobby: false,
+  enableAgentviz: false,
+  agentvizPath: '',
   copilotCliPath: '',
   copilotDbPath: '',
 };
