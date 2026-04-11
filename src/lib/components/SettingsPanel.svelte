@@ -22,10 +22,8 @@
   let setupPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let setupPathError = $state('');
 
-  // Port range state
-  let portStart = $state(4242);
-  let portEnd = $state(4244);
-  let portWarning = $state(false);
+  // Max sessions state
+  let maxSessions = $state(3);
 
   async function loadPaths() {
     try {
@@ -41,8 +39,7 @@
       copilotDbPath = '';
     }
     agentvizPath = $settings.agentvizPath || '';
-    portStart = $settings.agentvizPortStart;
-    portEnd = $settings.agentvizPortEnd;
+    maxSessions = $settings.agentvizMaxSessions;
   }
 
   $effect(() => {
@@ -172,19 +169,13 @@
     agentvizPathError = '';
   }
 
-  async function applyPortRange() {
-    if (portStart > portEnd || portStart < 1024 || portEnd > 65535) return;
+  async function onMaxSessionsChange() {
+    if (maxSessions < 1 || isNaN(maxSessions)) return;
+    updateSetting('agentvizMaxSessions', maxSessions);
+    // Kill excess processes when lowering the limit
     try {
-      await invoke('close_all_agentviz');
+      await invoke('trim_agentviz', { maxSessions: maxSessions });
     } catch { /* ignore */ }
-    updateSetting('agentvizPortStart', portStart);
-    updateSetting('agentvizPortEnd', portEnd);
-    portWarning = false;
-  }
-
-  function onPortChange() {
-    const changed = portStart !== $settings.agentvizPortStart || portEnd !== $settings.agentvizPortEnd;
-    portWarning = changed;
   }
 
   async function runReindex() {
@@ -225,7 +216,7 @@
         <input
           type="checkbox"
           checked={$settings.enableAgentviz}
-          onchange={handleEnableAgentviz}
+          onclick={(e: MouseEvent) => { e.preventDefault(); handleEnableAgentviz(); }}
         />
         <span class="setting-label">Enable agentviz</span>
       </label>
@@ -251,33 +242,16 @@
         </div>
 
         <div class="path-setting">
-          <label class="port-label">Port range</label>
+          <label class="port-label">Max parallel sessions</label>
           <div class="port-range-row">
             <input
               type="number"
               class="port-input"
-              min="1024"
-              max="65535"
-              bind:value={portStart}
-              oninput={onPortChange}
+              min="1"
+              bind:value={maxSessions}
+              onchange={onMaxSessionsChange}
             />
-            <span class="port-dash">–</span>
-            <input
-              type="number"
-              class="port-input"
-              min="1024"
-              max="65535"
-              bind:value={portEnd}
-              oninput={onPortChange}
-            />
-            <span class="port-slots">({portEnd - portStart + 1} slots)</span>
           </div>
-          {#if portWarning}
-            <div class="port-warning">
-              <span>⚠ Changing ports will close all running agentviz sessions.</span>
-              <button class="path-btn" onclick={applyPortRange}>Apply</button>
-            </div>
-          {/if}
         </div>
       {/if}
 
@@ -612,26 +586,6 @@
   .port-input:focus {
     outline: none;
     border-color: var(--accent);
-  }
-
-  .port-dash {
-    color: var(--text-secondary);
-  }
-
-  .port-slots {
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  .port-warning {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 6px;
-    font-size: 11px;
-    color: var(--warning, #e5c07b);
-    font-family: var(--font-mono);
   }
 
   .modal-overlay {

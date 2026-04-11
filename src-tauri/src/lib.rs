@@ -18,7 +18,7 @@ use std::os::windows::process::CommandExt;
 
 struct AppState {
     registry: Mutex<SourceRegistry>,
-    agentviz_processes: Mutex<Vec<(u16, Child)>>,
+    agentviz_processes: Mutex<Vec<Child>>,
 }
 
 #[tauri::command]
@@ -423,15 +423,14 @@ fn validate_agentviz_path(path: String) -> Result<(), String> {
 
 /// Open a session in agentviz (browser mode).
 /// Resolves the session's events.jsonl from source+id, spawns `node bin/agentviz.js <path>`.
-/// Enforces a port range: assigns a free port, or evicts the oldest process if all ports are taken.
+/// Enforces a max parallel instance cap with FIFO eviction of the oldest process.
 #[tauri::command]
 fn open_agentviz(
     state: State<AppState>,
     agentviz_path: String,
     source: String,
     id: String,
-    port_start: u16,
-    port_end: u16,
+    max_sessions: u32,
 ) -> Result<String, String> {
     // Validate agentviz installation
     validate_agentviz_path(agentviz_path.clone())?;
@@ -463,29 +462,21 @@ fn open_agentviz(
     let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
 
     // Prune finished processes
-    processes.retain_mut(|(_, child)| child.try_wait().ok().flatten().is_none());
+    processes.retain_mut(|child| child.try_wait().ok().flatten().is_none());
 
-    // Find a free port in the range
-    let used_ports: Vec<u16> = processes.iter().map(|(p, _)| *p).collect();
-    let port = (port_start..=port_end)
-        .find(|p| !used_ports.contains(p))
-        .unwrap_or_else(|| {
-            // All ports taken — evict the oldest (first in vec)
-            if let Some((evicted_port, mut child)) = processes.drain(..1).next() {
-                let _ = child.kill();
-                evicted_port
-            } else {
-                port_start
-            }
-        });
+    // Evict oldest if at capacity
+    let max = max_sessions.max(1) as usize;
+    while processes.len() >= max {
+        if let Some(mut child) = processes.drain(..1).next() {
+            let _ = child.kill();
+        }
+    }
 
     #[cfg(windows)]
     let child = {
         StdCommand::new("node")
             .arg(script.to_string_lossy().to_string())
             .arg(&target)
-            .arg("--port")
-            .arg(port.to_string())
             .current_dir(&agentviz_path)
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .spawn()
@@ -503,8 +494,6 @@ fn open_agentviz(
         StdCommand::new("node")
             .arg(script.to_string_lossy().to_string())
             .arg(&target)
-            .arg("--port")
-            .arg(port.to_string())
             .current_dir(&agentviz_path)
             .spawn()
             .map_err(|e| {
@@ -516,9 +505,9 @@ fn open_agentviz(
             })?
     };
 
-    processes.push((port, child));
+    processes.push(child);
 
-    Ok(format!("http://localhost:{}", port))
+    Ok("agentviz started".to_string())
 }
 
 /// Kill all tracked agentviz processes.
@@ -526,7 +515,7 @@ fn open_agentviz(
 fn close_all_agentviz(state: State<AppState>) -> Result<String, String> {
     let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
     let mut killed = 0;
-    for (_, child) in processes.iter_mut() {
+    for child in processes.iter_mut() {
         if child.try_wait().ok().flatten().is_none() {
             let _ = child.kill();
             killed += 1;
@@ -534,6 +523,23 @@ fn close_all_agentviz(state: State<AppState>) -> Result<String, String> {
     }
     processes.clear();
     Ok(format!("Closed {} agentviz instance(s)", killed))
+}
+
+/// Trim tracked agentviz processes to fit within max_sessions (FIFO — oldest killed first).
+#[tauri::command]
+fn trim_agentviz(state: State<AppState>, max_sessions: u32) -> Result<String, String> {
+    let mut processes = state.agentviz_processes.lock().map_err(|e| e.to_string())?;
+    // Prune dead ones first
+    processes.retain_mut(|child| child.try_wait().ok().flatten().is_none());
+    let max = max_sessions.max(1) as usize;
+    let mut killed = 0;
+    while processes.len() > max {
+        if let Some(mut child) = processes.drain(..1).next() {
+            let _ = child.kill();
+            killed += 1;
+        }
+    }
+    Ok(format!("Trimmed {} agentviz instance(s)", killed))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -606,6 +612,7 @@ pub fn run() {
             validate_agentviz_path,
             open_agentviz,
             close_all_agentviz,
+            trim_agentviz,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -615,7 +622,7 @@ pub fn run() {
                 let state = app.state::<AppState>();
                 let processes = state.agentviz_processes.lock();
                 if let Ok(mut processes) = processes {
-                    for (_, child) in processes.iter_mut() {
+                    for child in processes.iter_mut() {
                         let _ = child.kill();
                     }
                     processes.clear();

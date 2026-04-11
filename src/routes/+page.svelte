@@ -181,14 +181,12 @@
 
   async function handleOpenAgentviz(session: SessionSummary) {
     try {
-      const url = await invoke<string>('open_agentviz', {
+      await invoke('open_agentviz', {
         agentvizPath: $settings.agentvizPath,
         source: session.source,
         id: session.id,
-        portStart: $settings.agentvizPortStart,
-        portEnd: $settings.agentvizPortEnd,
+        maxSessions: $settings.agentvizMaxSessions,
       });
-      console.log('agentviz started at', url);
     } catch (e: any) {
       console.error('agentviz failed:', e);
     }

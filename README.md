@@ -42,6 +42,7 @@ Right-click any session for quick actions:
 - **Copy ID** — copies the session ID to clipboard; useful for resuming in a separate terminal via `copilot --resume=<id>`, unlinked to chasm (so the session survives if the app closes)
 - **Pin / Unpin** — pin a session to the top of its group; pins are stored globally in localStorage and persist across restarts (added in v0.1.0)
 - **Delete** — permanently removes the session folder from disk (with confirmation dialog)
+- **Open in AgentViz** — opens the session in [AgentViz](https://github.com/jayparikh/agentviz) for visual agent session exploration (enable in Settings, requires local AgentViz install)
 
 ## New Session
 
@@ -178,7 +179,6 @@ All valid paths are scanned and sessions are merged (deduplicated by session ID)
 ## Future Plans
 
 - **Checkpoint browsing** — browse and navigate session checkpoints directly within chasm
-- **AgentViz integration** — integrate [AgentViz](https://github.com/jayparikh/agentviz) for visual agent session exploration
 
 ## Documentation
 
