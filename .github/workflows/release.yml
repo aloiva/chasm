@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 'Release notes (optional, supports markdown)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -40,7 +45,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'chasm ${{ github.ref_name }}'
           releaseBody: |
-            ### Downloads
+            ${{ github.event.inputs.release_notes && format('## What''s New\n{0}\n\n', github.event.inputs.release_notes) || '' }}### Downloads
             - **Portable**: `chasm-portable.exe` — no install needed, just run it
             - **Installer**: `.exe` setup with Start Menu shortcut and uninstaller
             - **MSI**: for enterprise / GPO deployment
