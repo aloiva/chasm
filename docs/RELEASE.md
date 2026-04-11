@@ -30,26 +30,23 @@ When releasing a new version, bump the version in all three files:
 
 ## github releases
 
-Push a version tag to trigger automated builds:
+Push a version tag to trigger the automated build & release workflow:
 
 ```bash
-git tag -a v0.3.0 -m "v0.3.0"
-git push origin master --tags
+git tag -a v0.5.0 -m "v0.5.0"
+git push origin v0.5.0
 ```
 
-The GitHub Actions workflow builds on `windows-latest` and attaches installers to a GitHub Release.
+The workflow builds on `windows-latest` and attaches installers to a GitHub Release.
 
 ### release notes
 
-Release notes are added after the build completes using the GitHub CLI:
+The workflow does not accept release notes as input — they are added **after** the release is created. Use either:
 
 ```bash
-gh release edit v0.4.0 --notes "## What's New
+gh release edit v0.5.0 --notes "## What's New
 - Feature one
-- Feature two
-
-### Downloads
-..."
+- Bug fix two"
 ```
 
-Or edit directly on the GitHub Releases page.
+Or edit directly on the [GitHub Releases page](https://github.com/aloiva/chasm/releases).
