@@ -242,3 +242,65 @@ export function matchesAny(matchers: Matcher[], text: string): boolean {
   if (matchers.length === 0) return true;
   return matchers.some((m) => m(text));
 }
+
+/**
+ * Extract plain search keywords from a query string (strips operators like
+ * startswith=, endswith=, not=, !, contains=). Returns unique lowercase terms.
+ * Used to send individual terms to the backend for turn content search.
+ */
+export function extractSearchKeywords(input: string): string[] {
+  if (!input.trim()) return [];
+  const tokens = tokenize(input);
+  const keywords: string[] = [];
+  for (const tok of tokens) {
+    if (tok === ',' || tok === '+' || tok === '(' || tok === ')') continue;
+    const trimmed = tok.trim();
+    if (!trimmed) continue;
+    // Strip operator prefixes — for turn search we only use the value
+    const opMatch = trimmed.match(/^(?:startswith=|endswith=|contains=|not=|!)(.+)$/i);
+    const keyword = opMatch ? opMatch[1] : trimmed;
+    if (keyword) keywords.push(keyword.toLowerCase());
+  }
+  // Deduplicate
+  return [...new Set(keywords)];
+}
+
+/**
+ * Evaluate a SearchExpr against a set of per-keyword matched session IDs.
+ * Returns the set of session IDs matching the full expression.
+ * For AND: intersect results. For OR: union results.
+ * For term: look up keyword in the results map.
+ */
+export function resolveExprWithSets(
+  expr: SearchExpr,
+  keywordResults: Map<string, Set<string>>,
+): Set<string> {
+  switch (expr.type) {
+    case 'term': {
+      // Find which keyword map entry this term's matcher corresponds to
+      // by testing each keyword — the matcher will match its own keyword
+      for (const [kw, ids] of keywordResults) {
+        if (expr.matcher(kw)) return ids;
+      }
+      return new Set();
+    }
+    case 'and': {
+      const sets = expr.parts.map(p => resolveExprWithSets(p, keywordResults));
+      if (sets.length === 0) return new Set();
+      let result = sets[0];
+      for (let i = 1; i < sets.length; i++) {
+        result = new Set([...result].filter(id => sets[i].has(id)));
+      }
+      return result;
+    }
+    case 'or': {
+      const result = new Set<string>();
+      for (const part of expr.parts) {
+        for (const id of resolveExprWithSets(part, keywordResults)) {
+          result.add(id);
+        }
+      }
+      return result;
+    }
+  }
+}

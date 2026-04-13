@@ -9,6 +9,7 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import GroupContextMenu from '$lib/components/GroupContextMenu.svelte';
   import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin, searchQuery, messageMatchIds } from '$lib/stores/sessions';
+  import { extractSearchKeywords, parseSearchExpr, resolveExprWithSets } from '$lib/utils/search';
   import { settings } from '$lib/stores/settings';
   import type { SessionSummary } from '$lib/types/session';
 
@@ -101,7 +102,8 @@
     window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('chasm-rescan', handleRescan);
 
-    // Debounced message search: query the backend for turn content matches
+    // Debounced message search: query the backend for turn content matches.
+    // Each keyword is searched individually, then combined with AND/OR logic.
     unsubSearch = searchQuery.subscribe((q) => {
       if (msgSearchTimer) clearTimeout(msgSearchTimer);
       const trimmed = q.trim();
@@ -111,8 +113,32 @@
       }
       msgSearchTimer = setTimeout(async () => {
         try {
-          const ids: string[] = await invoke('search_messages', { query: trimmed });
-          messageMatchIds.set(new Set(ids));
+          const keywords = extractSearchKeywords(trimmed);
+          if (keywords.length === 0) {
+            messageMatchIds.set(new Set());
+            return;
+          }
+          // Query each keyword in parallel
+          const results = await Promise.all(
+            keywords.map(async (kw) => {
+              const ids: string[] = await invoke('search_messages', { query: kw });
+              return [kw, new Set(ids)] as [string, Set<string>];
+            })
+          );
+          const keywordResults = new Map(results);
+
+          // Combine using the parsed expression tree (AND = intersect, OR = union)
+          const expr = parseSearchExpr(trimmed);
+          if (expr) {
+            messageMatchIds.set(resolveExprWithSets(expr, keywordResults));
+          } else {
+            // Fallback: union all
+            const all = new Set<string>();
+            for (const [, ids] of keywordResults) {
+              for (const id of ids) all.add(id);
+            }
+            messageMatchIds.set(all);
+          }
         } catch {
           messageMatchIds.set(new Set());
         }
