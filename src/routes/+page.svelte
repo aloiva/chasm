@@ -50,21 +50,25 @@
   }
 
   async function scanSessions() {
-    loading.set(true);
+    const isViewing = !!get(selectedSessionId);
+    // Don't show loading spinner if user is reading a session
+    if (!isViewing) loading.set(true);
     try {
       // Phase 1: Show cached data instantly (no filesystem walk)
       const cached = await invoke('list_sessions_cached');
       sessions.set(cached as any[]);
-      loading.set(false);
-      refreshCounter.update(n => n + 1);
+      if (!isViewing) {
+        loading.set(false);
+        refreshCounter.update(n => n + 1);
+      }
 
-      // Phase 2: Full scan in background, update when done
+      // Phase 2: Full scan in background, silently update the list
       const fresh = await invoke('list_sessions');
       sessions.set(fresh as any[]);
-      refreshCounter.update(n => n + 1);
+      if (!isViewing) refreshCounter.update(n => n + 1);
     } catch (e) {
       console.error('Scan failed:', e);
-      loading.set(false);
+      if (!isViewing) loading.set(false);
     }
   }
 
