@@ -51,13 +51,19 @@
   async function scanSessions() {
     loading.set(true);
     try {
-      const result = await invoke('list_sessions');
-      sessions.set(result as any[]);
-    } catch (e) {
-      console.error('Scan failed:', e);
-    } finally {
+      // Phase 1: Show cached data instantly (no filesystem walk)
+      const cached = await invoke('list_sessions_cached');
+      sessions.set(cached as any[]);
       loading.set(false);
       refreshCounter.update(n => n + 1);
+
+      // Phase 2: Full scan in background, update when done
+      const fresh = await invoke('list_sessions');
+      sessions.set(fresh as any[]);
+      refreshCounter.update(n => n + 1);
+    } catch (e) {
+      console.error('Scan failed:', e);
+      loading.set(false);
     }
   }
 

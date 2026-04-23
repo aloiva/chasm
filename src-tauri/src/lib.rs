@@ -32,6 +32,16 @@ fn list_sessions(state: State<AppState>) -> Result<Vec<SessionSummary>, String> 
 }
 
 #[tauri::command]
+fn list_sessions_cached(state: State<AppState>) -> Result<Vec<SessionSummary>, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let (sessions, warnings) = registry.scan_all_cached();
+    for w in &warnings {
+        eprintln!("{}", w);
+    }
+    Ok(sessions)
+}
+
+#[tauri::command]
 fn get_session_detail(
     state: State<AppState>,
     source: String,
@@ -746,6 +756,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_sessions,
+            list_sessions_cached,
             get_session_detail,
             rename_session,
             delete_sessions,

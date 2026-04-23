@@ -99,6 +99,25 @@ impl VsCodeCopilotSource {
         let _ = std::fs::remove_file(self.cache_file_path());
     }
 
+    /// Return cached sessions without scanning. Tries memory → disk → None.
+    pub fn cached_sessions(&self) -> Option<Vec<SessionSummary>> {
+        // Try memory cache
+        if let Ok(guard) = self.mem_cache.lock() {
+            if let Some(ref cache) = *guard {
+                return Some(cache.sessions.clone());
+            }
+        }
+        // Try disk cache and warm memory
+        if let Some(disk) = self.read_disk_cache() {
+            let sessions = disk.sessions.clone();
+            if let Ok(mut guard) = self.mem_cache.lock() {
+                *guard = Some(disk);
+            }
+            return Some(sessions);
+        }
+        None
+    }
+
     fn cache_file_path(&self) -> PathBuf {
         self.cache_dir.join("vscode-copilot.json")
     }

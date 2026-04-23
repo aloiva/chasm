@@ -221,6 +221,44 @@ impl SourceRegistry {
         (all_sessions, warnings)
     }
 
+    /// Return cached sessions where available (no filesystem scan).
+    /// Sources without cache fall back to a normal scan.
+    pub fn scan_all_cached(&self) -> (Vec<SessionSummary>, Vec<String>) {
+        use crate::adapters::vscode_copilot::VsCodeCopilotSource;
+
+        let mut all_sessions = Vec::new();
+        let mut warnings = Vec::new();
+
+        for source in &self.sources {
+            if !source.is_available() {
+                continue;
+            }
+            // Try cache for VS Code adapter
+            if let Some(vsc) = source.as_any().downcast_ref::<VsCodeCopilotSource>() {
+                if let Some(cached) = vsc.cached_sessions() {
+                    all_sessions.extend(cached);
+                    continue;
+                }
+            }
+            // No cache — fall back to normal scan
+            match source.scan() {
+                Ok(sessions) => all_sessions.extend(sessions),
+                Err(SourceError::Warning(msg)) => {
+                    warnings.push(format!("[{}] {}", source.name(), msg));
+                }
+                Err(SourceError::Fatal(msg)) => {
+                    warnings.push(format!("[{}] FATAL: {}", source.name(), msg));
+                }
+            }
+        }
+
+        all_sessions.sort_by(|a, b| {
+            b.updated_at.as_deref().unwrap_or("").cmp(a.updated_at.as_deref().unwrap_or(""))
+        });
+
+        (all_sessions, warnings)
+    }
+
     /// Search turn messages across all sources that support it.
     pub fn search_turns(&self, query: &str) -> Vec<String> {
         let mut ids = Vec::new();
