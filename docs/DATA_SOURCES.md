@@ -86,36 +86,46 @@ Each workspace has a hash-named directory (e.g., `06030a2da987f22a151fd8a7dbd777
 
 Single table: `ItemTable` with `key TEXT PRIMARY KEY, value TEXT`
 
-**Key: `chat.ChatSessionStore.index`**
+**Key: `chat.ChatSessionStore.index`** — Session index with IDs, titles, dates.
 ```json
 {
   "version": 1,
   "entries": {
-    "c5ff71e7-c48d-434f-8c8a-4d835fdd7b0b": {
-      "sessionId": "c5ff71e7-c48d-434f-8c8a-4d835fdd7b0b",
+    "c5ff71e7-...": {
+      "sessionId": "c5ff71e7-...",
       "title": "Fixing RabbitMQOutput attribute usage in Azure Functions",
       "lastMessageDate": 1761704533416,
-      "isImported": false,
-      "initialLocation": "panel",
       "isEmpty": false
     }
   }
 }
 ```
 
-**Key: `memento/interactive-session`**
-Contains user prompt history per mode (copilot, editor).
+### chatSessions/ (per-workspace, conversation content)
+
+Session data is stored in `<workspace_hash>/chatSessions/<sessionId>.json` or `.jsonl` files.
+
+**Precedence**: `.jsonl` > `.json` > legacy DB key (`interactive.sessions.<id>`)
+
+#### .json format (older sessions)
+Full document with `version`, `sessionId`, `creationDate`, and `requests[]` array.
+Each request has:
+- `message.text` — user message
+- `response[]` — array of parts; text parts have a `value` string key
+- `timestamp` — epoch milliseconds
+
+#### .jsonl format (newer sessions, incremental)
+- **Line 0** (`kind: 0`): Initial snapshot — `v.requests` is usually empty.
+- **kind: 1**: SET — `k` is a JSON path, `v` is the new value (e.g., title updates).
+- **kind: 2**: APPEND — `k: ["requests"]`, `v: [<request>]` — appends a request.
+
+Request objects in both formats share the same structure (`message.text`, `response[]`, `timestamp`).
 
 **Key: `workspace.json`** (file, not DB key)
 ```json
 {"folder": "file:///q%3A/src/AAPT-Antares-ScaleController"}
 ```
 Maps workspace hash → project folder URI.
-
-### Stats (measured on this machine)
-- 89 workspaces with chat data
-- 215 total Copilot Chat sessions
-- Top workspace: 52 sessions (AAPT-Antares-ScaleController)
 
 ---
 

@@ -5,7 +5,7 @@ use adapters::{
     SessionDetail, SessionSummary, SourceRegistry,
 };
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::process::Child;
 use tauri::Manager;
@@ -542,8 +542,46 @@ fn trim_agentviz(state: State<AppState>, max_sessions: u32) -> Result<String, St
     Ok(format!("Trimmed {} agentviz instance(s)", killed))
 }
 
+/// Returns the app state directory (`~/.chasm/`).
+/// On first run, migrates from the legacy `~/.copilot-session-manager/` if it exists.
+fn app_state_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_default();
+    let new_dir = home.join(".chasm");
+    let legacy_dir = home.join(".copilot-session-manager");
+
+    if !new_dir.exists() && legacy_dir.exists() {
+        eprintln!("[chasm] Migrating app state from .copilot-session-manager/ to .chasm/");
+        if let Err(e) = copy_dir_recursive(&legacy_dir, &new_dir) {
+            eprintln!("[chasm] Migration failed: {}. Starting fresh.", e);
+            let _ = std::fs::create_dir_all(&new_dir);
+        }
+    } else if !new_dir.exists() {
+        let _ = std::fs::create_dir_all(&new_dir);
+    }
+
+    new_dir
+}
+
+/// Recursively copy a directory tree (used for one-time migration).
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ensure app state dir exists, migrating from legacy name if needed
+    let _app_dir = app_state_dir();
     let mut registry = SourceRegistry::new();
     registry.register(Box::new(CopilotCliSource::new()));
     registry.register(Box::new(VsCodeCopilotSource::new()));

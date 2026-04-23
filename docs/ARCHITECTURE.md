@@ -53,7 +53,7 @@ The app never crashes on missing data. Deleted sessions show a "(deleted)" badge
 
 ## Cache Model
 
-- First scan populates `~/.copilot-session-manager/cache/{source}.json`
+- First scan populates `~/.chasm/cache/{source}.json`
 - App boots from cache (instant <50ms)
 - Manual "Scan" button re-reads source files and updates cache
 - Filesystem watcher (optional, configurable) can trigger auto-refresh
@@ -86,4 +86,4 @@ src/
 
 ## Theming
 
-All visual properties come from CSS custom properties loaded from `~/.copilot-session-manager/theme.json`. Changing the JSON changes the entire look without rebuilding.
+All visual properties come from CSS custom properties loaded from `~/.chasm/theme.json`. Changing the JSON changes the entire look without rebuilding.

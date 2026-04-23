@@ -152,6 +152,12 @@ pub trait SessionSource: Send + Sync {
     /// Directories to watch for filesystem changes (for live updates).
     fn watch_paths(&self) -> Vec<PathBuf>;
 
+    /// Search turn messages for a query string, returning matching session IDs.
+    /// Default: returns empty (source doesn't support message search).
+    fn search_turns(&self, _query: &str) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Downcast support for source-specific configuration.
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -219,8 +225,8 @@ impl SourceRegistry {
     pub fn search_turns(&self, query: &str) -> Vec<String> {
         let mut ids = Vec::new();
         for source in &self.sources {
-            if let Some(cli) = source.as_any().downcast_ref::<copilot_cli::CopilotCliSource>() {
-                ids.extend(cli.search_turns(query));
+            if source.is_available() {
+                ids.extend(source.search_turns(query));
             }
         }
         ids.sort();

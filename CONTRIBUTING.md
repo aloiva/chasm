@@ -32,7 +32,7 @@ These rules are **mandatory** for all contributors (including AI agents).
 - **The app never writes to AI tool directories** except:
   - Copilot CLI: `workspace.yaml` (rename only)
   - Copilot CLI: folder deletion (delete only, with user confirmation)
-- **App state lives in `~/.copilot-session-manager/`** only. Pins, tags, cache, config — all in our own directory.
+- **App state lives in `~/.chasm/`** only. Pins, tags, cache, config — all in our own directory.
 - **VS Code `state.vscdb` is read-only.** Do not write to it under any circumstances.
 
 ## 6. Performance
