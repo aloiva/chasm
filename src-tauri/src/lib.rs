@@ -456,6 +456,68 @@ fn delete_workspace(state: State<AppState>, workspace_hash: String) -> Result<()
     vsc.delete_workspace(&workspace_hash).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_cache_dir(state: State<AppState>) -> Result<String, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.cache_dir().to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn set_cache_dir(state: State<AppState>, path: String) -> Result<(), String> {
+    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.set_cache_dir(PathBuf::from(path.trim()));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_cache_enabled(state: State<AppState>) -> Result<bool, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.cache_enabled())
+}
+
+#[tauri::command]
+fn set_cache_enabled(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.set_cache_enabled(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_cache(state: State<AppState>) -> Result<(), String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.clear_cache();
+    Ok(())
+}
+
 /// Validate that an agentviz path contains the built app (bin/agentviz.js + dist/index.html).
 #[tauri::command]
 fn validate_agentviz_path(path: String) -> Result<(), String> {
@@ -706,6 +768,11 @@ pub fn run() {
             set_vscode_workspace_path,
             count_workspace_sessions,
             delete_workspace,
+            get_cache_dir,
+            set_cache_dir,
+            get_cache_enabled,
+            set_cache_enabled,
+            clear_cache,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -4,6 +4,17 @@ use super::{
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+/// Cached scan results persisted to disk as JSON.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct ScanCache {
+    version: u32,
+    timestamp: String,
+    sessions: Vec<SessionSummary>,
+    /// session_id → workspace_hash for fast lookup
+    id_to_ws: HashMap<String, String>,
+}
 
 /// Source adapter for VS Code Copilot Chat sessions.
 ///
@@ -13,16 +24,27 @@ use std::path::{Path, PathBuf};
 /// - Linux:   ~/.config/Code/User/workspaceStorage/
 pub struct VsCodeCopilotSource {
     workspace_storage_dir: PathBuf,
+    cache_dir: PathBuf,
+    cache_enabled: bool,
+    /// In-memory hot cache (populated from disk or scan)
+    mem_cache: Mutex<Option<ScanCache>>,
 }
 
 impl VsCodeCopilotSource {
     pub fn new() -> Self {
         let base = dirs::config_dir().unwrap_or_default();
+        let chasm_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".chasm")
+            .join("cache");
         Self {
             workspace_storage_dir: base
                 .join("Code")
                 .join("User")
                 .join("workspaceStorage"),
+            cache_dir: chasm_dir,
+            cache_enabled: true,
+            mem_cache: Mutex::new(None),
         }
     }
 
@@ -34,6 +56,115 @@ impl VsCodeCopilotSource {
     /// Override the workspace storage directory (for user-configurable path).
     pub fn set_workspace_storage_dir(&mut self, path: PathBuf) {
         self.workspace_storage_dir = path;
+        // Invalidate cache when source path changes
+        if let Ok(mut c) = self.mem_cache.lock() {
+            *c = None;
+        }
+    }
+
+    /// Get the current cache directory.
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache_dir
+    }
+
+    /// Override the cache directory.
+    pub fn set_cache_dir(&mut self, path: PathBuf) {
+        self.cache_dir = path;
+        // Reload from new location
+        if let Ok(mut c) = self.mem_cache.lock() {
+            *c = None;
+        }
+    }
+
+    /// Check if caching is enabled.
+    pub fn cache_enabled(&self) -> bool {
+        self.cache_enabled
+    }
+
+    /// Enable or disable caching.
+    pub fn set_cache_enabled(&mut self, enabled: bool) {
+        self.cache_enabled = enabled;
+        if !enabled {
+            if let Ok(mut c) = self.mem_cache.lock() {
+                *c = None;
+            }
+        }
+    }
+
+    /// Clear both in-memory and disk cache.
+    pub fn clear_cache(&self) {
+        if let Ok(mut c) = self.mem_cache.lock() {
+            *c = None;
+        }
+        let _ = std::fs::remove_file(self.cache_file_path());
+    }
+
+    fn cache_file_path(&self) -> PathBuf {
+        self.cache_dir.join("vscode-copilot.json")
+    }
+
+    /// Write scan results to disk cache.
+    fn write_disk_cache(&self, cache: &ScanCache) {
+        if !self.cache_enabled {
+            return;
+        }
+        if let Err(_) = std::fs::create_dir_all(&self.cache_dir) {
+            return;
+        }
+        if let Ok(json) = serde_json::to_string(cache) {
+            let _ = std::fs::write(self.cache_file_path(), json);
+        }
+    }
+
+    /// Read scan results from disk cache.
+    fn read_disk_cache(&self) -> Option<ScanCache> {
+        if !self.cache_enabled {
+            return None;
+        }
+        let data = std::fs::read_to_string(self.cache_file_path()).ok()?;
+        serde_json::from_str(&data).ok()
+    }
+
+    /// Look up a session by ID from cache (memory → disk), returning the summary
+    /// and its workspace hash. Returns None on cache miss.
+    fn cached_lookup(&self, id: &str) -> Option<(SessionSummary, String)> {
+        // Try memory cache first
+        if let Ok(guard) = self.mem_cache.lock() {
+            if let Some(ref cache) = *guard {
+                if let Some(ws_hash) = cache.id_to_ws.get(id) {
+                    if let Some(summary) = cache.sessions.iter().find(|s| s.id == id) {
+                        return Some((summary.clone(), ws_hash.clone()));
+                    }
+                }
+            }
+        }
+
+        // Try disk cache
+        if let Some(disk) = self.read_disk_cache() {
+            let result = if let Some(ws_hash) = disk.id_to_ws.get(id) {
+                disk.sessions.iter().find(|s| s.id == id).map(|s| (s.clone(), ws_hash.clone()))
+            } else {
+                None
+            };
+            // Warm memory cache from disk
+            if let Ok(mut guard) = self.mem_cache.lock() {
+                *guard = Some(disk);
+            }
+            return result;
+        }
+
+        None
+    }
+
+    /// Remove a session from the in-memory and disk cache.
+    fn remove_from_cache(&self, id: &str) {
+        if let Ok(mut guard) = self.mem_cache.lock() {
+            if let Some(ref mut cache) = *guard {
+                cache.sessions.retain(|s| s.id != id);
+                cache.id_to_ws.remove(id);
+                self.write_disk_cache(cache);
+            }
+        }
     }
 
     /// Count total sessions (chatSessions files) in a given workspace hash directory.
@@ -396,6 +527,77 @@ impl VsCodeCopilotSource {
 
         Some(requests_to_turns(&all_requests))
     }
+
+    /// Internal: full filesystem walk without caching logic.
+    fn full_scan(&self) -> Result<Vec<SessionSummary>, SourceError> {
+        if !self.workspace_storage_dir.exists() {
+            return Err(SourceError::Fatal(format!(
+                "VS Code workspace storage not found at {}",
+                self.workspace_storage_dir.display()
+            )));
+        }
+
+        let mut all_sessions = Vec::new();
+
+        let entries = std::fs::read_dir(&self.workspace_storage_dir).map_err(|e| {
+            SourceError::Warning(format!("Failed to read workspace storage dir: {}", e))
+        })?;
+
+        for entry in entries.flatten() {
+            let ws_dir = entry.path();
+            if !ws_dir.is_dir() {
+                continue;
+            }
+
+            let db_path = ws_dir.join("state.vscdb");
+            if !db_path.exists() {
+                continue;
+            }
+
+            // Read workspace folder mapping
+            let folder = Self::read_workspace_folder(&ws_dir);
+            let ws_hash = ws_dir
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Read chat sessions from this workspace (skip on any error)
+            let sessions = match Self::read_chat_index(&db_path, &ws_dir) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            for session in sessions {
+                let mut extra = HashMap::new();
+                extra.insert("workspace_hash".to_string(), ws_hash.clone());
+                if let Some(ref f) = folder {
+                    extra.insert("workspace_folder".to_string(), f.clone());
+                }
+
+                let first_message = Self::first_message_from_file(&ws_dir, &session.session_id);
+
+                all_sessions.push(SessionSummary {
+                    id: session.session_id,
+                    source: "vscode-copilot".to_string(),
+                    title: session.title,
+                    turn_count: session.turn_count,
+                    cwd: folder.clone(),
+                    branch: None,
+                    created_at: session.last_message_date.clone(),
+                    updated_at: session.last_message_date.clone(),
+                    first_message,
+                    size_bytes: None,
+                    has_checkpoints: false,
+                    exists_on_disk: true,
+                    storage_path: Some(db_path.parent().unwrap_or(db_path.as_path()).to_string_lossy().into_owned()),
+                    status: super::compute_status(&session.last_message_date),
+                    extra,
+                });
+            }
+        }
+
+        Ok(all_sessions)
+    }
 }
 
 #[derive(Debug)]
@@ -515,87 +717,49 @@ impl SessionSource for VsCodeCopilotSource {
     }
 
     fn scan(&self) -> Result<Vec<SessionSummary>, SourceError> {
-        if !self.workspace_storage_dir.exists() {
-            return Err(SourceError::Fatal(format!(
-                "VS Code workspace storage not found at {}",
-                self.workspace_storage_dir.display()
-            )));
-        }
+        // Full filesystem scan — always rebuilds cache
+        let sessions = self.full_scan()?;
 
-        let mut all_sessions = Vec::new();
-
-        let entries = std::fs::read_dir(&self.workspace_storage_dir).map_err(|e| {
-            SourceError::Warning(format!("Failed to read workspace storage dir: {}", e))
-        })?;
-
-        for entry in entries.flatten() {
-            let ws_dir = entry.path();
-            if !ws_dir.is_dir() {
-                continue;
-            }
-
-            let db_path = ws_dir.join("state.vscdb");
-            if !db_path.exists() {
-                continue;
-            }
-
-            // Read workspace folder mapping
-            let folder = Self::read_workspace_folder(&ws_dir);
-            let ws_hash = ws_dir
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            // Read chat sessions from this workspace (skip on any error)
-            let sessions = match Self::read_chat_index(&db_path, &ws_dir) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            for session in sessions {
-                let mut extra = HashMap::new();
-                extra.insert("workspace_hash".to_string(), ws_hash.clone());
-                if let Some(ref f) = folder {
-                    extra.insert("workspace_folder".to_string(), f.clone());
-                }
-
-                let first_message = Self::first_message_from_file(&ws_dir, &session.session_id);
-
-                all_sessions.push(SessionSummary {
-                    id: session.session_id,
-                    source: self.name().to_string(),
-                    title: session.title,
-                    turn_count: session.turn_count,
-                    cwd: folder.clone(),
-                    branch: None,
-                    created_at: session.last_message_date.clone(),
-                    updated_at: session.last_message_date.clone(),
-                    first_message,
-                    size_bytes: None,
-                    has_checkpoints: false,
-                    exists_on_disk: true,
-                    storage_path: Some(db_path.parent().unwrap_or(db_path.as_path()).to_string_lossy().into_owned()),
-                    status: super::compute_status(&session.last_message_date),
-                    extra,
-                });
+        // Build id→workspace_hash lookup
+        let mut id_to_ws: HashMap<String, String> = HashMap::new();
+        for s in &sessions {
+            if let Some(ws) = s.extra.get("workspace_hash") {
+                id_to_ws.insert(s.id.clone(), ws.clone());
             }
         }
 
-        Ok(all_sessions)
+        let now = chrono::Utc::now().to_rfc3339();
+        let cache = ScanCache {
+            version: 1,
+            timestamp: now,
+            sessions: sessions.clone(),
+            id_to_ws,
+        };
+
+        // Persist to disk
+        self.write_disk_cache(&cache);
+
+        // Store in memory
+        if let Ok(mut guard) = self.mem_cache.lock() {
+            *guard = Some(cache);
+        }
+
+        Ok(sessions)
     }
 
     fn load_detail(&self, id: &str) -> Result<SessionDetail, SourceError> {
-        let scan = self.scan()?;
-        let summary = scan
-            .into_iter()
-            .find(|s| s.id == id)
-            .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
-
-        let ws_hash = summary
-            .extra
-            .get("workspace_hash")
-            .cloned()
-            .unwrap_or_default();
+        // Try cache first, fall back to full scan
+        let (summary, ws_hash) = if let Some(hit) = self.cached_lookup(id) {
+            hit
+        } else {
+            let scan = self.scan()?;
+            let s = scan
+                .into_iter()
+                .find(|s| s.id == id)
+                .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
+            let ws = s.extra.get("workspace_hash").cloned().unwrap_or_default();
+            (s, ws)
+        };
 
         let ws_dir = self.workspace_storage_dir.join(&ws_hash);
 
@@ -649,18 +813,19 @@ impl SessionSource for VsCodeCopilotSource {
     }
 
     fn delete(&self, id: &str) -> Result<(), SourceError> {
-        // Find the workspace containing this session
-        let scan = self.scan()?;
-        let summary = scan
-            .into_iter()
-            .find(|s| s.id == id)
-            .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
+        // Find the workspace containing this session (cache → full scan)
+        let (_, ws_hash) = if let Some(hit) = self.cached_lookup(id) {
+            hit
+        } else {
+            let scan = self.scan()?;
+            let s = scan
+                .into_iter()
+                .find(|s| s.id == id)
+                .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
+            let ws = s.extra.get("workspace_hash").cloned().unwrap_or_default();
+            (s, ws)
+        };
 
-        let ws_hash = summary
-            .extra
-            .get("workspace_hash")
-            .cloned()
-            .unwrap_or_default();
         let ws_dir = self.workspace_storage_dir.join(&ws_hash);
         let chat_dir = ws_dir.join("chatSessions");
 
@@ -709,16 +874,22 @@ impl SessionSource for VsCodeCopilotSource {
             )));
         }
 
+        // Remove from cache
+        self.remove_from_cache(id);
+
         Ok(())
     }
 
     fn resume(&self, id: &str) -> Result<ResumeAction, SourceError> {
-        // Find the workspace folder for this session
-        let scan = self.scan()?;
-        let session = scan
-            .iter()
-            .find(|s| s.id == id)
-            .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
+        // Find the workspace folder (cache → full scan)
+        let session = if let Some((s, _)) = self.cached_lookup(id) {
+            s
+        } else {
+            let scan = self.scan()?;
+            scan.into_iter()
+                .find(|s| s.id == id)
+                .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?
+        };
 
         if let Some(folder) = session.extra.get("workspace_folder") {
             // Open VS Code to the workspace folder.
@@ -742,6 +913,46 @@ impl SessionSource for VsCodeCopilotSource {
         let query_lower = query.to_lowercase();
         let mut matching_ids = Vec::new();
 
+        // Try workspace ID match from cache first (no filesystem walk needed)
+        if let Ok(guard) = self.mem_cache.lock() {
+            if let Some(ref cache) = *guard {
+                // Check workspace hash matches
+                let mut ws_matched: std::collections::HashSet<String> = std::collections::HashSet::new();
+                for (sid, ws_hash) in &cache.id_to_ws {
+                    if ws_hash.to_lowercase().contains(&query_lower) {
+                        ws_matched.insert(sid.clone());
+                    }
+                }
+                if !ws_matched.is_empty() {
+                    matching_ids.extend(ws_matched);
+                }
+
+                // For content search, use cached paths to read files directly
+                for s in &cache.sessions {
+                    if matching_ids.contains(&s.id) {
+                        continue;
+                    }
+                    if let Some(ws_hash) = cache.id_to_ws.get(&s.id) {
+                        let chat_dir = self.workspace_storage_dir.join(ws_hash).join("chatSessions");
+                        for ext in &["jsonl", "json"] {
+                            let path = chat_dir.join(format!("{}.{}", s.id, ext));
+                            if path.exists() {
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    if content.to_lowercase().contains(&query_lower) {
+                                        matching_ids.push(s.id.clone());
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                return matching_ids;
+            }
+        }
+
+        // No cache — fallback to full filesystem walk
         let entries = match std::fs::read_dir(&self.workspace_storage_dir) {
             Ok(e) => e,
             Err(_) => return Vec::new(),
@@ -754,7 +965,6 @@ impl SessionSource for VsCodeCopilotSource {
                 continue;
             }
 
-            // Check if query matches this workspace's hash ID
             let ws_hash = ws_dir
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -770,17 +980,14 @@ impl SessionSource for VsCodeCopilotSource {
                     }
 
                     if ws_hash_match {
-                        // Workspace ID matched — include all sessions in this workspace
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             matching_ids.push(stem.to_string());
                         }
                         continue;
                     }
 
-                    // Cheap: read file and do case-insensitive contains check
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         if content.to_lowercase().contains(&query_lower) {
-                            // Extract session ID from filename (strip extension)
                             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                                 matching_ids.push(stem.to_string());
                             }

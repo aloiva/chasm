@@ -8,6 +8,8 @@ export interface AppSettings {
   copilotCliPath: string;
   copilotDbPath: string;
   vscodeWorkspacePath: string;
+  cacheEnabled: boolean;
+  cacheDir: string;
 }
 
 const STORAGE_KEY = 'chasm-settings';
@@ -20,6 +22,8 @@ const defaultSettings: AppSettings = {
   copilotCliPath: '',
   copilotDbPath: '',
   vscodeWorkspacePath: '',
+  cacheEnabled: true,
+  cacheDir: '',
 };
 
 function loadSettings(): AppSettings {
