@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::process::Child;
 use tauri::Manager;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, State};
 
@@ -17,13 +17,13 @@ use tauri::{Emitter, State};
 use std::os::windows::process::CommandExt;
 
 struct AppState {
-    registry: Mutex<SourceRegistry>,
+    registry: RwLock<SourceRegistry>,
     agentviz_processes: Mutex<Vec<Child>>,
 }
 
 #[tauri::command]
 fn list_sessions(state: State<AppState>) -> Result<Vec<SessionSummary>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let (sessions, warnings) = registry.scan_all();
     for w in &warnings {
         eprintln!("{}", w);
@@ -37,7 +37,7 @@ fn get_session_detail(
     source: String,
     id: String,
 ) -> Result<SessionDetail, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -51,7 +51,7 @@ fn rename_session(
     id: String,
     name: String,
 ) -> Result<(), String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -64,7 +64,7 @@ fn delete_sessions(
     source: String,
     ids: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -84,7 +84,7 @@ fn resume_session(
     source: String,
     id: String,
 ) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -229,7 +229,7 @@ fn reindex_sessions() -> Result<String, String> {
 /// If `path` is empty, defaults to the current user's home directory.
 #[tauri::command]
 fn search_messages(state: State<AppState>, query: String) -> Result<Vec<String>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     Ok(registry.search_turns(&query))
 }
 
@@ -293,7 +293,7 @@ fn new_session(path: String, session_type: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_available_sources(state: State<AppState>) -> Result<Vec<SourceInfo>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     Ok(registry
         .all_sources()
         .iter()
@@ -316,7 +316,7 @@ struct SourceInfo {
 
 #[tauri::command]
 fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("copilot-cli").ok_or("Copilot CLI source not found")?;
     let cli = source
         .as_any()
@@ -331,7 +331,7 @@ fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("copilot-cli")
         .ok_or("Copilot CLI source not found")?;
@@ -357,7 +357,7 @@ fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), Stri
 
 #[tauri::command]
 fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("copilot-cli").ok_or("Copilot CLI source not found")?;
     let cli = source
         .as_any()
@@ -372,7 +372,7 @@ fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_copilot_db_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("copilot-cli")
         .ok_or("Copilot CLI source not found")?;
@@ -407,7 +407,7 @@ fn is_dobby_path(path: String) -> bool {
 
 #[tauri::command]
 fn get_vscode_workspace_path(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -418,7 +418,7 @@ fn get_vscode_workspace_path(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_vscode_workspace_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("vscode-copilot")
         .ok_or("VS Code source not found")?;
@@ -436,7 +436,7 @@ fn set_vscode_workspace_path(state: State<AppState>, path: String) -> Result<(),
 
 #[tauri::command]
 fn count_workspace_sessions(state: State<AppState>, workspace_hash: String) -> Result<u32, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -447,7 +447,7 @@ fn count_workspace_sessions(state: State<AppState>, workspace_hash: String) -> R
 
 #[tauri::command]
 fn delete_workspace(state: State<AppState>, workspace_hash: String) -> Result<(), String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -458,7 +458,7 @@ fn delete_workspace(state: State<AppState>, workspace_hash: String) -> Result<()
 
 #[tauri::command]
 fn get_cache_dir(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -469,7 +469,7 @@ fn get_cache_dir(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_cache_dir(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("vscode-copilot")
         .ok_or("VS Code source not found")?;
@@ -483,7 +483,7 @@ fn set_cache_dir(state: State<AppState>, path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn get_cache_enabled(state: State<AppState>) -> Result<bool, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -494,7 +494,7 @@ fn get_cache_enabled(state: State<AppState>) -> Result<bool, String> {
 
 #[tauri::command]
 fn set_cache_enabled(state: State<AppState>, enabled: bool) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("vscode-copilot")
         .ok_or("VS Code source not found")?;
@@ -508,7 +508,7 @@ fn set_cache_enabled(state: State<AppState>, enabled: bool) -> Result<(), String
 
 #[tauri::command]
 fn clear_cache(state: State<AppState>) -> Result<(), String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
     let vsc = source
         .as_any()
@@ -549,7 +549,7 @@ fn open_agentviz(
     validate_agentviz_path(agentviz_path.clone())?;
 
     // Resolve session path via the adapter
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -711,7 +711,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            registry: Mutex::new(registry),
+            registry: RwLock::new(registry),
             agentviz_processes: Mutex::new(Vec::new()),
         })
         .setup(move |app| {
