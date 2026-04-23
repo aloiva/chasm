@@ -405,6 +405,57 @@ fn is_dobby_path(path: String) -> bool {
     parent.join("Start-Copilot.ps1").exists()
 }
 
+#[tauri::command]
+fn get_vscode_workspace_path(state: State<AppState>) -> Result<String, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.workspace_storage_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn set_vscode_workspace_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    let p = PathBuf::from(path.trim());
+    if !p.exists() {
+        return Err(format!("Path does not exist: {}", p.display()));
+    }
+    vsc.set_workspace_storage_dir(p);
+    Ok(())
+}
+
+#[tauri::command]
+fn count_workspace_sessions(state: State<AppState>, workspace_hash: String) -> Result<u32, String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.count_workspace_sessions(&workspace_hash))
+}
+
+#[tauri::command]
+fn delete_workspace(state: State<AppState>, workspace_hash: String) -> Result<(), String> {
+    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.delete_workspace(&workspace_hash).map_err(|e| e.to_string())
+}
+
 /// Validate that an agentviz path contains the built app (bin/agentviz.js + dist/index.html).
 #[tauri::command]
 fn validate_agentviz_path(path: String) -> Result<(), String> {
@@ -651,6 +702,10 @@ pub fn run() {
             open_agentviz,
             close_all_agentviz,
             trim_agentviz,
+            get_vscode_workspace_path,
+            set_vscode_workspace_path,
+            count_workspace_sessions,
+            delete_workspace,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -6,6 +6,7 @@
     { value: 'folder' as const, label: 'Folder' },
     { value: 'branch' as const, label: 'Branch' },
     { value: 'date' as const, label: 'Date' },
+    { value: 'workspace' as const, label: 'Workspace' },
   ];
 
   let open = $state(false);

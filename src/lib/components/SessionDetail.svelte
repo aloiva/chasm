@@ -101,6 +101,9 @@
             {#if detail.summary.branch}
               <span>🌿 {detail.summary.branch}</span>
             {/if}
+            {#if detail.summary.extra?.workspace_folder}
+              <span class="meta-item" title="Workspace: {detail.summary.extra.workspace_hash}">🖥 {detail.summary.extra.workspace_folder} ({(detail.summary.extra.workspace_hash ?? '').slice(0, 8)})</span>
+            {/if}
             <span>💬 {detail.turns.length} turns</span>
             {#if detail.checkpoints.length > 0}
               <span>📌 {detail.checkpoints.length} checkpoints</span>

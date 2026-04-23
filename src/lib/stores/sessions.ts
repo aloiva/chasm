@@ -9,7 +9,7 @@ export const searchQuery = writable('');
 /** Session IDs whose turn messages matched the current search query (set by backend) */
 export const messageMatchIds = writable<Set<string>>(new Set());
 export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title' | 'branch' | 'folder' | 'source'>('updated');
-export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
+export const viewMode = writable<'source' | 'folder' | 'branch' | 'date' | 'workspace'>('source');
 export const selectedSessionId = writable<string | null>(null);
 export const selectedGroupKey = writable<string | null>(null);
 export const collapsedGroups = writable<Set<string>>(new Set());
@@ -270,6 +270,11 @@ export const groupedSessions = derived(
           break;
         case 'date':
           key = weekBucket(s.updated_at);
+          break;
+        case 'workspace':
+          key = s.extra?.workspace_folder
+            ? `${s.extra.workspace_folder} (${(s.extra.workspace_hash ?? '').slice(0, 8)})`
+            : '(no workspace)';
           break;
         default:
           key = sourceDisplayMap.get(s.source) ?? s.source;

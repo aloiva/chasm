@@ -15,6 +15,9 @@
   let agentvizPath = $state('');
   let agentvizPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let agentvizPathError = $state('');
+  let vscodePath = $state('');
+  let vscodePathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let vscodePathError = $state('');
 
   // Setup popup state
   let showAgentvizSetup = $state(false);
@@ -40,6 +43,12 @@
     }
     agentvizPath = $settings.agentvizPath || '';
     maxSessions = $settings.agentvizMaxSessions;
+    try {
+      const savedVscode = $settings.vscodeWorkspacePath;
+      vscodePath = savedVscode || await invoke<string>('get_vscode_workspace_path');
+    } catch {
+      vscodePath = '';
+    }
   }
 
   $effect(() => {
@@ -146,6 +155,29 @@
       copilotDbPath = await invoke<string>('get_copilot_db_path');
       dbPathStatus = 'idle';
       dbPathError = '';
+    } catch { /* ignore */ }
+  }
+
+  async function saveVscodePath() {
+    vscodePathStatus = 'saving';
+    vscodePathError = '';
+    try {
+      await invoke('set_vscode_workspace_path', { path: vscodePath });
+      updateSetting('vscodeWorkspacePath', vscodePath);
+      vscodePathStatus = 'saved';
+      window.dispatchEvent(new CustomEvent('chasm-rescan'));
+    } catch (e: any) {
+      vscodePathStatus = 'error';
+      vscodePathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
+    }
+  }
+
+  async function resetVscodePath() {
+    try {
+      updateSetting('vscodeWorkspacePath', '');
+      vscodePath = await invoke<string>('get_vscode_workspace_path');
+      vscodePathStatus = 'idle';
+      vscodePathError = '';
     } catch { /* ignore */ }
   }
 
@@ -296,6 +328,28 @@
           <span class="path-status saved">✓ Applied</span>
         {:else if dbPathStatus === 'error'}
           <span class="path-status error">{dbPathError}</span>
+        {/if}
+      </div>
+
+      <div class="settings-divider"></div>
+      <div class="settings-header">VS Code Workspace Storage Path</div>
+
+      <div class="path-setting">
+        <input
+          type="text"
+          class="path-input"
+          placeholder="%APPDATA%/Code/User/workspaceStorage"
+          bind:value={vscodePath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveVscodePath(); }}
+        />
+        <div class="path-actions">
+          <button class="path-btn" onclick={saveVscodePath} title="Apply path">Apply</button>
+          <button class="path-btn path-reset" onclick={resetVscodePath} title="Reset to default">Reset</button>
+        </div>
+        {#if vscodePathStatus === 'saved'}
+          <span class="path-status saved">✓ Applied</span>
+        {:else if vscodePathStatus === 'error'}
+          <span class="path-status error">{vscodePathError}</span>
         {/if}
       </div>
 

@@ -38,6 +38,8 @@
   const clampedY = $derived(Math.min(y, window.innerHeight - menuHeight));
 
   const isReadOnly = $derived(session.source === 'vscode-copilot');
+  const isDeleteDisabled = $derived(isDeleted);
+  const isRenameDisabled = $derived(isReadOnly || isDeleted);
   const isDeleted = $derived(!session.exists_on_disk);
   const sessionPinned = $derived($pinnedSessions.has(session.id + ':' + session.source));
 
@@ -99,7 +101,7 @@
     <button
       class="menu-item"
       onclick={() => handleAction(() => onrename(session))}
-      disabled={isReadOnly || isDeleted}
+      disabled={isRenameDisabled || isDeleted}
       title={isReadOnly ? 'Rename not supported for VS Code sessions' : ''}
     >
       <span class="icon">✏️</span> Rename
@@ -108,8 +110,7 @@
     <button
       class="menu-item danger"
       onclick={() => handleAction(() => ondelete(session))}
-      disabled={isReadOnly || isDeleted}
-      title={isReadOnly ? 'Delete not supported for VS Code sessions' : ''}
+      disabled={isDeleteDisabled}
     >
       <span class="icon">🗑</span> Delete
     </button>

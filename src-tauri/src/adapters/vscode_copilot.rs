@@ -26,6 +26,55 @@ impl VsCodeCopilotSource {
         }
     }
 
+    /// Get the current workspace storage directory.
+    pub fn workspace_storage_dir(&self) -> &Path {
+        &self.workspace_storage_dir
+    }
+
+    /// Override the workspace storage directory (for user-configurable path).
+    pub fn set_workspace_storage_dir(&mut self, path: PathBuf) {
+        self.workspace_storage_dir = path;
+    }
+
+    /// Count total sessions (chatSessions files) in a given workspace hash directory.
+    pub fn count_workspace_sessions(&self, workspace_hash: &str) -> u32 {
+        let ws_dir = self.workspace_storage_dir.join(workspace_hash);
+        let chat_dir = ws_dir.join("chatSessions");
+        if !chat_dir.is_dir() {
+            return 0;
+        }
+        std::fs::read_dir(&chat_dir)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .filter(|e| {
+                        let path = e.path();
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        ext == "json" || ext == "jsonl"
+                    })
+                    .count() as u32
+            })
+            .unwrap_or(0)
+    }
+
+    /// Delete an entire workspace hash folder.
+    pub fn delete_workspace(&self, workspace_hash: &str) -> Result<(), SourceError> {
+        let ws_dir = self.workspace_storage_dir.join(workspace_hash);
+        if !ws_dir.exists() {
+            return Err(SourceError::Warning(format!(
+                "Workspace directory not found: {}",
+                ws_dir.display()
+            )));
+        }
+        std::fs::remove_dir_all(&ws_dir).map_err(|e| {
+            SourceError::Warning(format!(
+                "Failed to delete workspace {}: {}",
+                ws_dir.display(),
+                e
+            ))
+        })
+    }
+
     /// Read workspace.json to find which folder this workspace maps to.
     fn read_workspace_folder(ws_dir: &Path) -> Option<String> {
         let ws_json_path = ws_dir.join("workspace.json");

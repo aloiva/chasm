@@ -7,6 +7,7 @@ export interface AppSettings {
   agentvizMaxSessions: number;
   copilotCliPath: string;
   copilotDbPath: string;
+  vscodeWorkspacePath: string;
 }
 
 const STORAGE_KEY = 'chasm-settings';
@@ -18,6 +19,7 @@ const defaultSettings: AppSettings = {
   agentvizMaxSessions: 3,
   copilotCliPath: '',
   copilotDbPath: '',
+  vscodeWorkspacePath: '',
 };
 
 function loadSettings(): AppSettings {
