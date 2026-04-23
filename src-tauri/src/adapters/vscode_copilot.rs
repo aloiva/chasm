@@ -754,11 +754,26 @@ impl SessionSource for VsCodeCopilotSource {
                 continue;
             }
 
+            // Check if query matches this workspace's hash ID
+            let ws_hash = ws_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            let ws_hash_match = ws_hash.to_lowercase().contains(&query_lower);
+
             if let Ok(files) = std::fs::read_dir(&chat_dir) {
                 for file in files.flatten() {
                     let path = file.path();
                     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     if ext != "json" && ext != "jsonl" {
+                        continue;
+                    }
+
+                    if ws_hash_match {
+                        // Workspace ID matched — include all sessions in this workspace
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            matching_ids.push(stem.to_string());
+                        }
                         continue;
                     }
 
