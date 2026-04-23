@@ -101,8 +101,12 @@
             {#if detail.summary.branch}
               <span>🌿 {detail.summary.branch}</span>
             {/if}
-            {#if detail.summary.extra?.workspace_folder}
-              <span class="meta-item" title="Workspace: {detail.summary.extra.workspace_hash}">🖥 {detail.summary.extra.workspace_folder} ({(detail.summary.extra.workspace_hash ?? '').slice(0, 8)})</span>
+            {#if detail.summary.extra?.workspace_hash}
+              <button
+                class="meta-item copyable"
+                title="Click to copy workspace ID: {detail.summary.extra.workspace_hash}"
+                onclick={() => navigator.clipboard.writeText(detail.summary.extra.workspace_hash)}
+              >🖥 {detail.summary.extra.workspace_hash.slice(0, 8)}…</button>
             {/if}
             <span>💬 {detail.turns.length} turns</span>
             {#if detail.checkpoints.length > 0}
@@ -233,6 +237,18 @@
     text-align: left;
   }
   .session-id:hover { color: var(--accent); }
+  .meta-item.copyable {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    text-align: left;
+    transition: color 0.15s;
+  }
+  .meta-item.copyable:hover { color: var(--accent); }
   .files-badge {
     font-size: 10px; color: var(--accent-yellow);
     margin-top: 4px;
