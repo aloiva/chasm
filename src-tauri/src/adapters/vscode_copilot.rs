@@ -152,40 +152,36 @@ impl VsCodeCopilotSource {
         Some(requests.len() as u32)
     }
 
-    /// Count turns from a .jsonl chat session file (count kind:2 patches that append to "requests").
+    /// Count turns from a .jsonl chat session file by replaying patches.
+    /// A "turn" is a top-level request. kind:2 patches that append to
+    /// `["requests", N, "response"]` are response chunks, not new turns.
     fn count_turns_jsonl(path: &Path) -> Option<u32> {
         let content = std::fs::read_to_string(path).ok()?;
         let mut count = 0u32;
         for line in content.lines() {
             if let Ok(patch) = serde_json::from_str::<serde_json::Value>(line) {
-                if patch.get("kind")?.as_u64()? == 2 {
-                    // kind:2 = append. Check if appending to "requests"
-                    if let Some(keys) = patch.get("k").and_then(|v| v.as_array()) {
-                        if keys.first().and_then(|k| k.as_str()) == Some("requests") {
-                            // v is an array of appended requests
-                            if let Some(arr) = patch.get("v").and_then(|v| v.as_array()) {
-                                count += arr.len() as u32;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // If we found kind:2 patches, use that count
-        // If zero, check initial snapshot for pre-populated requests
-        if count == 0 {
-            for line in content.lines() {
-                if let Ok(patch) = serde_json::from_str::<serde_json::Value>(line) {
-                    if patch.get("kind").and_then(|v| v.as_u64()) == Some(0) {
+                match patch.get("kind").and_then(|v| v.as_u64()) {
+                    Some(0) => {
+                        // Initial snapshot — count pre-populated requests
                         if let Some(reqs) = patch.get("v")
                             .and_then(|v| v.get("requests"))
                             .and_then(|v| v.as_array())
                         {
-                            return Some(reqs.len() as u32);
+                            count += reqs.len() as u32;
                         }
                     }
+                    Some(2) => {
+                        // Append — only count when path is exactly ["requests"]
+                        if let Some(keys) = patch.get("k").and_then(|v| v.as_array()) {
+                            if keys.len() == 1 && keys[0].as_str() == Some("requests") {
+                                if let Some(arr) = patch.get("v").and_then(|v| v.as_array()) {
+                                    count += arr.len() as u32;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                break; // kind:0 is always line 0
             }
         }
         Some(count)
@@ -293,6 +289,9 @@ impl VsCodeCopilotSource {
     }
 
     /// Parse conversation turns from a .jsonl session file by replaying patches.
+    /// Collects requests from kind:0 (snapshot) and kind:2 appends to ["requests"].
+    /// kind:2 appends to ["requests", N, "response"] are response chunks — those
+    /// get merged into the matching request's response array.
     fn load_turns_jsonl(path: &Path) -> Option<Vec<ConversationTurn>> {
         let content = std::fs::read_to_string(path).ok()?;
         let mut all_requests: Vec<serde_json::Value> = Vec::new();
@@ -310,16 +309,38 @@ impl VsCodeCopilotSource {
                         }
                     }
                     Some(2) => {
-                        // Append operation
                         if let Some(keys) = patch.get("k").and_then(|v| v.as_array()) {
-                            if keys.first().and_then(|k| k.as_str()) == Some("requests") {
+                            if keys.len() == 1 && keys[0].as_str() == Some("requests") {
+                                // Append new request(s) to the list
                                 if let Some(arr) = patch.get("v").and_then(|v| v.as_array()) {
                                     all_requests.extend(arr.iter().cloned());
+                                }
+                            } else if keys.len() == 3
+                                && keys[0].as_str() == Some("requests")
+                                && keys[2].as_str() == Some("response")
+                            {
+                                // Append response chunks to existing request
+                                let req_idx: usize = keys[1].as_str()
+                                    .and_then(|s| s.parse().ok())
+                                    .or_else(|| keys[1].as_u64().map(|n| n as usize))
+                                    .unwrap_or(usize::MAX);
+                                if req_idx < all_requests.len() {
+                                    if let Some(arr) = patch.get("v").and_then(|v| v.as_array()) {
+                                        if let Some(resp) = all_requests[req_idx]
+                                            .get_mut("response")
+                                            .and_then(|r| r.as_array_mut())
+                                        {
+                                            resp.extend(arr.iter().cloned());
+                                        } else {
+                                            all_requests[req_idx]["response"] =
+                                                serde_json::Value::Array(arr.clone());
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    _ => {} // kind:1 (set) — skip for now, not needed for turn extraction
+                    _ => {}
                 }
             }
         }
@@ -578,10 +599,68 @@ impl SessionSource for VsCodeCopilotSource {
         ))
     }
 
-    fn delete(&self, _id: &str) -> Result<(), SourceError> {
-        Err(SourceError::Warning(
-            "Deleting VS Code sessions is not supported — state.vscdb is an internal VS Code database".to_string(),
-        ))
+    fn delete(&self, id: &str) -> Result<(), SourceError> {
+        // Find the workspace containing this session
+        let scan = self.scan()?;
+        let summary = scan
+            .into_iter()
+            .find(|s| s.id == id)
+            .ok_or_else(|| SourceError::Warning(format!("Session {} not found", id)))?;
+
+        let ws_hash = summary
+            .extra
+            .get("workspace_hash")
+            .cloned()
+            .unwrap_or_default();
+        let ws_dir = self.workspace_storage_dir.join(&ws_hash);
+        let chat_dir = ws_dir.join("chatSessions");
+
+        // Delete session file (.jsonl or .json)
+        let mut deleted_file = false;
+        for ext in &["jsonl", "json"] {
+            let path = chat_dir.join(format!("{}.{}", id, ext));
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| {
+                    SourceError::Warning(format!("Failed to delete {}: {}", path.display(), e))
+                })?;
+                deleted_file = true;
+            }
+        }
+
+        // Remove from session index in state.vscdb
+        let db_path = ws_dir.join("state.vscdb");
+        if db_path.exists() {
+            if let Ok(conn) = Connection::open(&db_path) {
+                // Read current index, remove entry, write back
+                if let Ok(mut stmt) =
+                    conn.prepare("SELECT value FROM ItemTable WHERE key = 'chat.ChatSessionStore.index'")
+                {
+                    if let Ok(json_str) = stmt.query_row([], |row| row.get::<_, String>(0)) {
+                        if let Ok(mut index) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                            if let Some(entries) = index.get_mut("entries").and_then(|v| v.as_object_mut()) {
+                                entries.remove(id);
+                                if let Ok(updated) = serde_json::to_string(&index) {
+                                    let _ = conn.execute(
+                                        "UPDATE ItemTable SET value = ?1 WHERE key = 'chat.ChatSessionStore.index'",
+                                        [&updated],
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !deleted_file {
+            return Err(SourceError::Warning(format!(
+                "No chat session file found for {} in {}",
+                id,
+                chat_dir.display()
+            )));
+        }
+
+        Ok(())
     }
 
     fn resume(&self, id: &str) -> Result<ResumeAction, SourceError> {
