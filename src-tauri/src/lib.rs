@@ -5,11 +5,11 @@ use adapters::{
     SessionDetail, SessionSummary, SourceRegistry,
 };
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::process::Child;
 use tauri::Manager;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, State};
 
@@ -17,14 +17,24 @@ use tauri::{Emitter, State};
 use std::os::windows::process::CommandExt;
 
 struct AppState {
-    registry: Mutex<SourceRegistry>,
+    registry: RwLock<SourceRegistry>,
     agentviz_processes: Mutex<Vec<Child>>,
 }
 
 #[tauri::command]
 fn list_sessions(state: State<AppState>) -> Result<Vec<SessionSummary>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let (sessions, warnings) = registry.scan_all();
+    for w in &warnings {
+        eprintln!("{}", w);
+    }
+    Ok(sessions)
+}
+
+#[tauri::command]
+fn list_sessions_cached(state: State<AppState>) -> Result<Vec<SessionSummary>, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let (sessions, warnings) = registry.scan_all_cached();
     for w in &warnings {
         eprintln!("{}", w);
     }
@@ -37,7 +47,7 @@ fn get_session_detail(
     source: String,
     id: String,
 ) -> Result<SessionDetail, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -51,7 +61,7 @@ fn rename_session(
     id: String,
     name: String,
 ) -> Result<(), String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -64,7 +74,7 @@ fn delete_sessions(
     source: String,
     ids: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -84,7 +94,7 @@ fn resume_session(
     source: String,
     id: String,
 ) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -229,7 +239,7 @@ fn reindex_sessions() -> Result<String, String> {
 /// If `path` is empty, defaults to the current user's home directory.
 #[tauri::command]
 fn search_messages(state: State<AppState>, query: String) -> Result<Vec<String>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     Ok(registry.search_turns(&query))
 }
 
@@ -293,7 +303,7 @@ fn new_session(path: String, session_type: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_available_sources(state: State<AppState>) -> Result<Vec<SourceInfo>, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     Ok(registry
         .all_sources()
         .iter()
@@ -316,7 +326,7 @@ struct SourceInfo {
 
 #[tauri::command]
 fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("copilot-cli").ok_or("Copilot CLI source not found")?;
     let cli = source
         .as_any()
@@ -331,7 +341,7 @@ fn get_copilot_cli_path(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("copilot-cli")
         .ok_or("Copilot CLI source not found")?;
@@ -357,7 +367,7 @@ fn set_copilot_cli_path(state: State<AppState>, path: String) -> Result<(), Stri
 
 #[tauri::command]
 fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let source = registry.get_source("copilot-cli").ok_or("Copilot CLI source not found")?;
     let cli = source
         .as_any()
@@ -372,7 +382,7 @@ fn get_copilot_db_path(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn set_copilot_db_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let mut registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
         .get_source_mut("copilot-cli")
         .ok_or("Copilot CLI source not found")?;
@@ -403,6 +413,119 @@ fn is_dobby_path(path: String) -> bool {
     }
     let parent = std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new(&path));
     parent.join("Start-Copilot.ps1").exists()
+}
+
+#[tauri::command]
+fn get_vscode_workspace_path(state: State<AppState>) -> Result<String, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.workspace_storage_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn set_vscode_workspace_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    let p = PathBuf::from(path.trim());
+    if !p.exists() {
+        return Err(format!("Path does not exist: {}", p.display()));
+    }
+    vsc.set_workspace_storage_dir(p);
+    Ok(())
+}
+
+#[tauri::command]
+fn count_workspace_sessions(state: State<AppState>, workspace_hash: String) -> Result<u32, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.count_workspace_sessions(&workspace_hash))
+}
+
+#[tauri::command]
+fn delete_workspace(state: State<AppState>, workspace_hash: String) -> Result<(), String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.delete_workspace(&workspace_hash).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_cache_dir(state: State<AppState>) -> Result<String, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.cache_dir().to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn set_cache_dir(state: State<AppState>, path: String) -> Result<(), String> {
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.set_cache_dir(PathBuf::from(path.trim()));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_cache_enabled(state: State<AppState>) -> Result<bool, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.cache_enabled())
+}
+
+#[tauri::command]
+fn set_cache_enabled(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.set_cache_enabled(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_cache(state: State<AppState>) -> Result<(), String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.clear_cache();
+    Ok(())
 }
 
 /// Validate that an agentviz path contains the built app (bin/agentviz.js + dist/index.html).
@@ -436,7 +559,7 @@ fn open_agentviz(
     validate_agentviz_path(agentviz_path.clone())?;
 
     // Resolve session path via the adapter
-    let registry = state.registry.lock().map_err(|e| e.to_string())?;
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
     let adapter = registry
         .get_source(&source)
         .ok_or_else(|| format!("Source '{}' not found", source))?;
@@ -542,8 +665,46 @@ fn trim_agentviz(state: State<AppState>, max_sessions: u32) -> Result<String, St
     Ok(format!("Trimmed {} agentviz instance(s)", killed))
 }
 
+/// Returns the app state directory (`~/.chasm/`).
+/// On first run, migrates from the legacy `~/.copilot-session-manager/` if it exists.
+fn app_state_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_default();
+    let new_dir = home.join(".chasm");
+    let legacy_dir = home.join(".copilot-session-manager");
+
+    if !new_dir.exists() && legacy_dir.exists() {
+        eprintln!("[chasm] Migrating app state from .copilot-session-manager/ to .chasm/");
+        if let Err(e) = copy_dir_recursive(&legacy_dir, &new_dir) {
+            eprintln!("[chasm] Migration failed: {}. Starting fresh.", e);
+            let _ = std::fs::create_dir_all(&new_dir);
+        }
+    } else if !new_dir.exists() {
+        let _ = std::fs::create_dir_all(&new_dir);
+    }
+
+    new_dir
+}
+
+/// Recursively copy a directory tree (used for one-time migration).
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ensure app state dir exists, migrating from legacy name if needed
+    let _app_dir = app_state_dir();
     let mut registry = SourceRegistry::new();
     registry.register(Box::new(CopilotCliSource::new()));
     registry.register(Box::new(VsCodeCopilotSource::new()));
@@ -560,7 +721,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            registry: Mutex::new(registry),
+            registry: RwLock::new(registry),
             agentviz_processes: Mutex::new(Vec::new()),
         })
         .setup(move |app| {
@@ -595,6 +756,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_sessions,
+            list_sessions_cached,
             get_session_detail,
             rename_session,
             delete_sessions,
@@ -613,6 +775,15 @@ pub fn run() {
             open_agentviz,
             close_all_agentviz,
             trim_agentviz,
+            get_vscode_workspace_path,
+            set_vscode_workspace_path,
+            count_workspace_sessions,
+            delete_workspace,
+            get_cache_dir,
+            set_cache_dir,
+            get_cache_enabled,
+            set_cache_enabled,
+            clear_cache,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

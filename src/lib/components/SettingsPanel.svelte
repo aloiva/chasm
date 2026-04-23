@@ -15,6 +15,16 @@
   let agentvizPath = $state('');
   let agentvizPathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let agentvizPathError = $state('');
+  let vscodePath = $state('');
+  let vscodePathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let vscodePathError = $state('');
+
+  // Cache state
+  let cachePath = $state('');
+  let cachePathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let cachePathError = $state('');
+  let cacheEnabled = $state(true);
+  let clearCacheStatus = $state<'idle' | 'clearing' | 'cleared' | 'error'>('idle');
 
   // Setup popup state
   let showAgentvizSetup = $state(false);
@@ -40,6 +50,22 @@
     }
     agentvizPath = $settings.agentvizPath || '';
     maxSessions = $settings.agentvizMaxSessions;
+    try {
+      const savedVscode = $settings.vscodeWorkspacePath;
+      vscodePath = savedVscode || await invoke<string>('get_vscode_workspace_path');
+    } catch {
+      vscodePath = '';
+    }
+    try {
+      cachePath = $settings.cacheDir || await invoke<string>('get_cache_dir');
+    } catch {
+      cachePath = '';
+    }
+    try {
+      cacheEnabled = $settings.cacheEnabled !== undefined ? $settings.cacheEnabled : await invoke<boolean>('get_cache_enabled');
+    } catch {
+      cacheEnabled = true;
+    }
   }
 
   $effect(() => {
@@ -147,6 +173,70 @@
       dbPathStatus = 'idle';
       dbPathError = '';
     } catch { /* ignore */ }
+  }
+
+  async function saveVscodePath() {
+    vscodePathStatus = 'saving';
+    vscodePathError = '';
+    try {
+      await invoke('set_vscode_workspace_path', { path: vscodePath });
+      updateSetting('vscodeWorkspacePath', vscodePath);
+      vscodePathStatus = 'saved';
+      window.dispatchEvent(new CustomEvent('chasm-rescan'));
+    } catch (e: any) {
+      vscodePathStatus = 'error';
+      vscodePathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
+    }
+  }
+
+  async function resetVscodePath() {
+    try {
+      updateSetting('vscodeWorkspacePath', '');
+      vscodePath = await invoke<string>('get_vscode_workspace_path');
+      vscodePathStatus = 'idle';
+      vscodePathError = '';
+    } catch { /* ignore */ }
+  }
+
+  async function toggleCacheEnabled() {
+    cacheEnabled = !cacheEnabled;
+    try {
+      await invoke('set_cache_enabled', { enabled: cacheEnabled });
+      updateSetting('cacheEnabled', cacheEnabled);
+    } catch { /* ignore */ }
+  }
+
+  async function saveCachePath() {
+    cachePathStatus = 'saving';
+    cachePathError = '';
+    try {
+      await invoke('set_cache_dir', { path: cachePath });
+      updateSetting('cacheDir', cachePath);
+      cachePathStatus = 'saved';
+    } catch (e: any) {
+      cachePathStatus = 'error';
+      cachePathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
+    }
+  }
+
+  async function resetCachePath() {
+    try {
+      updateSetting('cacheDir', '');
+      cachePath = await invoke<string>('get_cache_dir');
+      cachePathStatus = 'idle';
+      cachePathError = '';
+    } catch { /* ignore */ }
+  }
+
+  async function clearCache() {
+    clearCacheStatus = 'clearing';
+    try {
+      await invoke('clear_cache');
+      clearCacheStatus = 'cleared';
+      setTimeout(() => { clearCacheStatus = 'idle'; }, 2000);
+    } catch {
+      clearCacheStatus = 'error';
+    }
   }
 
   async function saveAgentvizPath() {
@@ -298,6 +388,64 @@
           <span class="path-status error">{dbPathError}</span>
         {/if}
       </div>
+
+      <div class="settings-divider"></div>
+      <div class="settings-header">VS Code Workspace Storage Path</div>
+
+      <div class="path-setting">
+        <input
+          type="text"
+          class="path-input"
+          placeholder="%APPDATA%/Code/User/workspaceStorage"
+          bind:value={vscodePath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveVscodePath(); }}
+        />
+        <div class="path-actions">
+          <button class="path-btn" onclick={saveVscodePath} title="Apply path">Apply</button>
+          <button class="path-btn path-reset" onclick={resetVscodePath} title="Reset to default">Reset</button>
+        </div>
+        {#if vscodePathStatus === 'saved'}
+          <span class="path-status saved">✓ Applied</span>
+        {:else if vscodePathStatus === 'error'}
+          <span class="path-status error">{vscodePathError}</span>
+        {/if}
+      </div>
+
+      <div class="settings-divider"></div>
+      <div class="settings-header">Cache</div>
+
+      <label class="setting-row">
+        <span>Enable disk cache</span>
+        <input type="checkbox" checked={cacheEnabled} onchange={toggleCacheEnabled} />
+      </label>
+
+      <div class="path-setting">
+        <input
+          type="text"
+          class="path-input"
+          placeholder="~/.chasm/cache/"
+          bind:value={cachePath}
+          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveCachePath(); }}
+        />
+        <div class="path-actions">
+          <button class="path-btn" onclick={saveCachePath} title="Apply cache path">Apply</button>
+          <button class="path-btn path-reset" onclick={resetCachePath} title="Reset to default">Reset</button>
+        </div>
+        {#if cachePathStatus === 'saved'}
+          <span class="path-status saved">✓ Applied</span>
+        {:else if cachePathStatus === 'error'}
+          <span class="path-status error">{cachePathError}</span>
+        {/if}
+      </div>
+
+      <button class="action-row" onclick={clearCache}>
+        <span>🗑 Clear Cache</span>
+        {#if clearCacheStatus === 'cleared'}
+          <span class="status-badge done">✓ Cleared</span>
+        {:else if clearCacheStatus === 'error'}
+          <span class="status-badge error">Failed</span>
+        {/if}
+      </button>
 
       <div class="settings-divider"></div>
       <div class="settings-header">Experimental</div>

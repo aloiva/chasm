@@ -18,6 +18,8 @@
   let renameTarget = $state<SessionSummary | null>(null);
   let renameValue = $state('');
   let deleteConfirm = $state<SessionSummary | null>(null);
+  let deleteWorkspaceCount = $state(0);
+  let deleteMode = $state<'session' | 'workspace'>('session');
   let unlisten: (() => void) | null = null;
   let msgSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let unsubSearch: (() => void) | null = null;
@@ -50,13 +52,19 @@
   async function scanSessions() {
     loading.set(true);
     try {
-      const result = await invoke('list_sessions');
-      sessions.set(result as any[]);
-    } catch (e) {
-      console.error('Scan failed:', e);
-    } finally {
+      // Phase 1: Show cached data instantly (no filesystem walk)
+      const cached = await invoke('list_sessions_cached');
+      sessions.set(cached as any[]);
       loading.set(false);
       refreshCounter.update(n => n + 1);
+
+      // Phase 2: Full scan in background, update when done
+      const fresh = await invoke('list_sessions');
+      sessions.set(fresh as any[]);
+      refreshCounter.update(n => n + 1);
+    } catch (e) {
+      console.error('Scan failed:', e);
+      loading.set(false);
     }
   }
 
@@ -252,34 +260,64 @@
     renameValue = '';
   }
 
-  function handleDeleteStart(session: SessionSummary) {
+  async function handleDeleteStart(session: SessionSummary) {
     deleteConfirm = session;
+    deleteMode = 'session';
+    deleteWorkspaceCount = 0;
+    // For VS Code sessions with a workspace, check how many sessions are in the workspace
+    if (session.source === 'vscode-copilot' && session.extra?.workspace_hash) {
+      try {
+        const count = await invoke<number>('count_workspace_sessions', {
+          workspaceHash: session.extra.workspace_hash,
+        });
+        deleteWorkspaceCount = count;
+      } catch {
+        deleteWorkspaceCount = 0;
+      }
+    }
   }
 
   async function handleDeleteConfirm() {
     if (!deleteConfirm) return;
     try {
-      const errors: string[] = await invoke('delete_sessions', {
-        source: deleteConfirm.source,
-        ids: [deleteConfirm.id],
-      });
-      if (errors.length > 0) {
-        console.error('Delete errors:', errors);
-      } else {
-        // Remove from local state
-        const deleted = deleteConfirm;
+      if (deleteMode === 'workspace' && deleteConfirm.extra?.workspace_hash) {
+        // Workspace-level delete: removes entire workspace folder
+        await invoke('delete_workspace', {
+          workspaceHash: deleteConfirm.extra.workspace_hash,
+        });
+        // Remove all sessions from this workspace from local state
+        const wsHash = deleteConfirm.extra.workspace_hash;
         sessions.update(all =>
-          all.filter(s => !(s.id === deleted.id && s.source === deleted.source))
+          all.filter(s => !(s.source === 'vscode-copilot' && s.extra?.workspace_hash === wsHash))
         );
-        // Clear detail if viewing the deleted session
-        if ($selectedSessionId === deleted.id + ':' + deleted.source) {
-          selectedSessionId.set(null);
+        if ($selectedSessionId) {
+          const sel = $sessions.find(s => s.id + ':' + s.source === $selectedSessionId);
+          if (!sel) selectedSessionId.set(null);
+        }
+      } else {
+        // Session-level delete
+        const errors: string[] = await invoke('delete_sessions', {
+          source: deleteConfirm.source,
+          ids: [deleteConfirm.id],
+        });
+        if (errors.length > 0) {
+          console.error('Delete errors:', errors);
+        } else {
+          const deleted = deleteConfirm;
+          sessions.update(all =>
+            all.filter(s => !(s.id === deleted.id && s.source === deleted.source))
+          );
+          if ($selectedSessionId === deleted.id + ':' + deleted.source) {
+            selectedSessionId.set(null);
+          }
         }
       }
     } catch (e: any) {
       console.error('Delete failed:', e);
     } finally {
       deleteConfirm = null;
+      deleteWorkspaceCount = 0;
+      deleteMode = 'session';
     }
   }
 
@@ -367,12 +405,30 @@
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
     <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
       <div class="modal-title">Delete Session</div>
-      <div class="modal-text">
-        This will permanently delete the session folder from disk. This action cannot be undone.
-      </div>
+      {#if deleteConfirm.source === 'vscode-copilot' && deleteWorkspaceCount > 1}
+        <div class="modal-text">
+          This workspace contains <strong>{deleteWorkspaceCount}</strong> session(s). Choose what to delete:
+        </div>
+        <div class="delete-options">
+          <label class="delete-option">
+            <input type="radio" bind:group={deleteMode} value="session" />
+            <span>Delete this session only</span>
+          </label>
+          <label class="delete-option">
+            <input type="radio" bind:group={deleteMode} value="workspace" />
+            <span>Delete entire workspace ({deleteWorkspaceCount} sessions)</span>
+          </label>
+        </div>
+      {:else}
+        <div class="modal-text">
+          This will permanently delete the session from disk. This action cannot be undone.
+        </div>
+      {/if}
       <div class="modal-actions">
         <button class="modal-btn cancel" onclick={handleDeleteCancel}>Cancel</button>
-        <button class="modal-btn danger" onclick={handleDeleteConfirm}>Delete</button>
+        <button class="modal-btn danger" onclick={handleDeleteConfirm}>
+          {deleteMode === 'workspace' ? 'Delete Workspace' : 'Delete'}
+        </button>
       </div>
     </div>
   </div>
@@ -564,4 +620,25 @@
     border-color: var(--accent-red);
   }
   .modal-btn.danger:hover { opacity: 0.9; }
+
+  .delete-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .delete-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+  }
+  .delete-option:hover { border-color: var(--accent); }
+  .delete-option input[type="radio"] { accent-color: var(--accent); }
 </style>

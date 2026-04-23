@@ -33,7 +33,7 @@ MCP is deferred to v2 for real-time enrichment features (auto-tagging, activity 
 
 ## 3. Why cache-based startup?
 
-**Decision**: Scan results saved to `~/.copilot-session-manager/cache/{source}.json`. App boots from cache.
+**Decision**: Scan results saved to `~/.chasm/cache/{source}.json`. App boots from cache.
 
 Even though a full scan is ~400ms, we want the app to feel instant:
 - First launch: scan runs, results cached (~400ms)
