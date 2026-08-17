@@ -12,6 +12,7 @@ export const sortBy = writable<'updated' | 'created' | 'turns' | 'size' | 'title
 export const viewMode = writable<'source' | 'folder' | 'branch' | 'date'>('source');
 export const selectedSessionId = writable<string | null>(null);
 export const selectedGroupKey = writable<string | null>(null);
+export const selectedSessions = writable<Set<string>>(new Set());
 export const collapsedGroups = writable<Set<string>>(new Set());
 export const groupFilter = writable('');
 /** Bumped on every scan to trigger detail panel re-fetch */
@@ -66,6 +67,15 @@ export function selectGroup(key: string) {
 export function selectSession(compositeId: string) {
   selectedGroupKey.set(null);
   selectedSessionId.set(compositeId);
+}
+
+export function toggleSessionSelection(compositeId: string) {
+  selectedSessions.update(selected => {
+    const next = new Set(selected);
+    if (next.has(compositeId)) next.delete(compositeId);
+    else next.add(compositeId);
+    return next;
+  });
 }
 
 /** Advanced filters — all optional, applied cumulatively */

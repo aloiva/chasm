@@ -25,6 +25,7 @@ struct ScanCache {
 pub struct VsCodeCopilotSource {
     workspace_storage_dir: PathBuf,
     cache_dir: PathBuf,
+    enabled: bool,
     cache_enabled: bool,
     /// In-memory hot cache (populated from disk or scan)
     mem_cache: Mutex<Option<ScanCache>>,
@@ -43,9 +44,18 @@ impl VsCodeCopilotSource {
                 .join("User")
                 .join("workspaceStorage"),
             cache_dir: chasm_dir,
+            enabled: true,
             cache_enabled: true,
             mem_cache: Mutex::new(None),
         }
+    }
+
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
     }
 
     /// Get the current workspace storage directory.
@@ -732,7 +742,7 @@ impl SessionSource for VsCodeCopilotSource {
     }
 
     fn is_available(&self) -> bool {
-        self.workspace_storage_dir.exists()
+        self.enabled && self.workspace_storage_dir.exists()
     }
 
     fn scan(&self) -> Result<Vec<SessionSummary>, SourceError> {
@@ -1020,7 +1030,11 @@ impl SessionSource for VsCodeCopilotSource {
     }
 
     fn watch_paths(&self) -> Vec<PathBuf> {
-        vec![self.workspace_storage_dir.clone()]
+        if self.enabled {
+            vec![self.workspace_storage_dir.clone()]
+        } else {
+            Vec::new()
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

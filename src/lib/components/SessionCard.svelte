@@ -2,7 +2,13 @@
   import type { SessionSummary } from '$lib/types/session';
   import SourceBadge from './SourceBadge.svelte';
   import { formatDate, formatDateRange, truncate } from '$lib/utils/format';
-  import { selectedSessionId, selectSession, pinnedSessions } from '$lib/stores/sessions';
+  import {
+    selectedSessionId,
+    selectSession,
+    pinnedSessions,
+    selectedSessions,
+    toggleSessionSelection,
+  } from '$lib/stores/sessions';
 
   let { session, oncontextmenu }: {
     session: SessionSummary;
@@ -11,6 +17,7 @@
 
   const compositeId = $derived(session.id + ':' + session.source);
   const isActive = $derived($selectedSessionId === compositeId);
+  const isSelected = $derived($selectedSessions.has(compositeId));
   const isPinned = $derived($pinnedSessions.has(compositeId));
   const displayTitle = $derived(
     session.title ?? truncate(session.first_message, 60) ?? '(unnamed session)'
@@ -22,51 +29,78 @@
   }
 </script>
 
-<button
-  class="card"
-  class:active={isActive}
-  class:deleted={!session.exists_on_disk}
-  onclick={() => selectSession(compositeId)}
-  oncontextmenu={handleContextMenu}
->
-  <SourceBadge source={session.source} />
-  <div class="body">
-    <div class="title">
-      {#if isPinned}
-        <span class="pin-icon" title="Pinned">📌</span>
+<div class="card-row" class:selected={isSelected} class:deleted={!session.exists_on_disk}>
+  <input
+    class="session-checkbox"
+    type="checkbox"
+    checked={isSelected}
+    aria-label={`Select ${displayTitle}`}
+    onclick={(e: MouseEvent) => e.stopPropagation()}
+    onchange={() => toggleSessionSelection(compositeId)}
+  />
+  <button
+    class="card"
+    class:active={isActive}
+    onclick={() => selectSession(compositeId)}
+    oncontextmenu={handleContextMenu}
+  >
+    <SourceBadge source={session.source} />
+    <div class="body">
+      <div class="title">
+        {#if isPinned}
+          <span class="pin-icon" title="Pinned">📌</span>
+        {/if}
+        {#if session.status === 'recent'}
+          <span class="status-dot" title="Recently active"></span>
+        {/if}
+        {displayTitle}
+      </div>
+      <div class="meta">
+        {#if session.cwd}
+          <span class="cwd">{session.cwd}</span>
+        {/if}
+        {#if session.branch}
+          <span class="branch">· {session.branch}</span>
+        {/if}
+      </div>
+      {#if session.first_message && session.title}
+        <div class="preview">"{truncate(session.first_message, 80)}"</div>
       {/if}
-      {#if session.status === 'recent'}
-        <span class="status-dot" title="Recently active"></span>
-      {/if}
-      {displayTitle}
     </div>
-    <div class="meta">
-      {#if session.cwd}
-        <span class="cwd">{session.cwd}</span>
-      {/if}
-      {#if session.branch}
-        <span class="branch">· {session.branch}</span>
-      {/if}
-    </div>
-    {#if session.first_message && session.title}
-      <div class="preview">"{truncate(session.first_message, 80)}"</div>
-    {/if}
-  </div>
-  <div class="right">
-    <div class="turns">
-      {session.turn_count} turn{session.turn_count !== 1 ? 's' : ''}
-      {#if session.has_checkpoints}
-        <span class="ckpt">· ckpt</span>
+    <div class="right">
+      <div class="turns">
+        {session.turn_count} turn{session.turn_count !== 1 ? 's' : ''}
+        {#if session.has_checkpoints}
+          <span class="ckpt">· ckpt</span>
+        {/if}
+      </div>
+      <div class="date">{formatDateRange(session.created_at, session.updated_at)}</div>
+      {#if !session.exists_on_disk}
+        <div class="deleted-badge">deleted</div>
       {/if}
     </div>
-    <div class="date">{formatDateRange(session.created_at, session.updated_at)}</div>
-    {#if !session.exists_on_disk}
-      <div class="deleted-badge">deleted</div>
-    {/if}
-  </div>
-</button>
+  </button>
+</div>
 
 <style>
+  .card-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius);
+  }
+  .card-row:hover,
+  .card-row.selected {
+    background: var(--bg-secondary);
+  }
+  .card-row.selected {
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .card-row.deleted { opacity: 0.5; }
+  .session-checkbox {
+    flex-shrink: 0;
+    margin: 0 2px 0 10px;
+    cursor: pointer;
+  }
   .card {
     display: flex;
     align-items: flex-start;
@@ -81,11 +115,11 @@
     color: inherit;
     font: inherit;
     text-align: left;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
-  .card:hover { background: var(--bg-secondary); }
+  .card:hover { background: transparent; }
   .card.active { background: var(--bg-tertiary); border-left-color: var(--accent); }
-  .card.deleted { opacity: 0.5; }
 
   .body { flex: 1; min-width: 0; }
   .title {

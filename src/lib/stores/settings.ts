@@ -7,6 +7,7 @@ export interface AppSettings {
   agentvizMaxSessions: number;
   copilotCliPath: string;
   copilotDbPath: string;
+  vscodeEnabled: boolean;
   vscodeWorkspacePath: string;
   cacheEnabled: boolean;
   cacheDir: string;
@@ -21,6 +22,7 @@ const defaultSettings: AppSettings = {
   agentvizMaxSessions: 3,
   copilotCliPath: '',
   copilotDbPath: '',
+  vscodeEnabled: true,
   vscodeWorkspacePath: '',
   cacheEnabled: true,
   cacheDir: '',

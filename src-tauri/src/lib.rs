@@ -427,6 +427,31 @@ fn get_vscode_workspace_path(state: State<AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_vscode_enabled(state: State<AppState>) -> Result<bool, String> {
+    let registry = state.registry.read().map_err(|e| e.to_string())?;
+    let source = registry.get_source("vscode-copilot").ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any()
+        .downcast_ref::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    Ok(vsc.enabled())
+}
+
+#[tauri::command]
+fn set_vscode_enabled(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    let mut registry = state.registry.write().map_err(|e| e.to_string())?;
+    let source = registry
+        .get_source_mut("vscode-copilot")
+        .ok_or("VS Code source not found")?;
+    let vsc = source
+        .as_any_mut()
+        .downcast_mut::<VsCodeCopilotSource>()
+        .ok_or("Downcast failed")?;
+    vsc.set_enabled(enabled);
+    Ok(())
+}
+
+#[tauri::command]
 fn set_vscode_workspace_path(state: State<AppState>, path: String) -> Result<(), String> {
     let mut registry = state.registry.write().map_err(|e| e.to_string())?;
     let source = registry
@@ -717,6 +742,10 @@ pub fn run() {
         .flat_map(|s| s.watch_paths())
         .filter(|p| p.exists())
         .collect();
+    let vscode_watch_paths = registry
+        .get_source("vscode-copilot")
+        .map(|source| source.watch_paths())
+        .unwrap_or_default();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -732,7 +761,33 @@ pub fn run() {
 
             let mut watcher: RecommendedWatcher = notify::recommended_watcher(
                 move |res: Result<notify::Event, notify::Error>| {
-                    if res.is_ok() {
+                    if let Ok(event) = res {
+                        let is_vscode_event = event
+                            .paths
+                            .iter()
+                            .any(|path| vscode_watch_paths.iter().any(|root| path.starts_with(root)));
+                        if is_vscode_event {
+                            let vscode_enabled = handle
+                                .state::<AppState>()
+                                .registry
+                                .read()
+                                .ok()
+                                .and_then(|registry| {
+                                    registry
+                                        .get_source("vscode-copilot")
+                                        .and_then(|source| {
+                                            source
+                                                .as_any()
+                                                .downcast_ref::<VsCodeCopilotSource>()
+                                                .map(|vsc| vsc.enabled())
+                                        })
+                                })
+                                .unwrap_or(true);
+                            if !vscode_enabled {
+                                return;
+                            }
+                        }
+
                         let mut last = last_emit_clone.lock().unwrap();
                         if last.elapsed() >= Duration::from_secs(2) {
                             *last = Instant::now();
@@ -776,6 +831,8 @@ pub fn run() {
             close_all_agentviz,
             trim_agentviz,
             get_vscode_workspace_path,
+            get_vscode_enabled,
+            set_vscode_enabled,
             set_vscode_workspace_path,
             count_workspace_sessions,
             delete_workspace,

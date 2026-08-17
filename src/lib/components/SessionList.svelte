@@ -10,12 +10,23 @@
     selectedGroupKey,
     groupFilter,
     selectGroup,
-    selectSession,
+    selectedSessions,
   } from '$lib/stores/sessions';
 
-  let { oncontextmenu, ongroupcontextmenu }: {
+  let {
+    oncontextmenu,
+    ongroupcontextmenu,
+    onbulkdelete,
+    ondeleteempty,
+    bulkdeleting = false,
+    bulkdeleteerror = '',
+  }: {
     oncontextmenu?: (e: MouseEvent, session: SessionSummary) => void;
     ongroupcontextmenu?: (e: MouseEvent, key: string) => void;
+    onbulkdelete?: () => void;
+    ondeleteempty?: (sessions: SessionSummary[]) => void;
+    bulkdeleting?: boolean;
+    bulkdeleteerror?: string;
   } = $props();
 
   function resolveHeader(key: string): string {
@@ -33,6 +44,10 @@
   }
 
   const groupKeys = $derived(Object.keys($filteredGroupedSessions));
+  const visibleSessions = $derived(Object.values($filteredGroupedSessions).flat());
+  const visibleEmptySessions = $derived(
+    visibleSessions.filter(session => session.exists_on_disk && session.turn_count === 0)
+  );
 
   // Auto-collapse new groups when defaultCollapsed is on
   $effect(() => {
@@ -49,6 +64,22 @@
   function expandAll() {
     defaultCollapsed.set(false);
     collapsedGroups.set(new Set());
+  }
+
+  function selectVisible(emptyOnly = false) {
+    selectedSessions.update(selected => {
+      const next = new Set(selected);
+      for (const session of visibleSessions) {
+        if (session.exists_on_disk && (!emptyOnly || session.turn_count === 0)) {
+          next.add(session.id + ':' + session.source);
+        }
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    selectedSessions.set(new Set());
   }
 </script>
 
@@ -67,6 +98,27 @@
         <button class="group-filter-clear" onclick={() => groupFilter.set('')} aria-label="Clear filter">×</button>
       {/if}
     </div>
+    <button class="tb-btn selection-btn" onclick={() => selectVisible()} title="Select all filtered sessions">All</button>
+    <button class="tb-btn selection-btn" onclick={() => selectVisible(true)} title="Select empty filtered sessions">Empty</button>
+    {#if visibleEmptySessions.length > 0}
+      <button
+        class="tb-btn delete-btn"
+        onclick={() => ondeleteempty?.(visibleEmptySessions)}
+        disabled={bulkdeleting}
+        title="Permanently delete all visible sessions with zero turns"
+      >
+        {bulkdeleting ? 'Deleting…' : `Delete Empty (${visibleEmptySessions.length})`}
+      </button>
+    {/if}
+    {#if $selectedSessions.size > 0}
+      <button class="tb-btn selection-btn" onclick={clearSelection} title="Clear selection">Clear</button>
+      <button class="tb-btn delete-btn" onclick={() => onbulkdelete?.()} disabled={bulkdeleting}>
+        Delete {$selectedSessions.size}
+      </button>
+    {/if}
+    {#if bulkdeleteerror}
+      <span class="delete-error" title={bulkdeleteerror}>{bulkdeleteerror}</span>
+    {/if}
   </div>
 
   <div class="list">
@@ -139,6 +191,37 @@
   .tb-btn:hover {
     color: var(--text-primary);
     border-color: var(--text-secondary);
+  }
+  .selection-btn {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .delete-btn {
+    padding: 3px 7px;
+    border: 1px solid var(--accent-red);
+    border-radius: var(--radius);
+    background: rgba(248, 81, 73, 0.12);
+    color: var(--accent-red);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .delete-btn:hover {
+    background: var(--accent-red);
+    color: #fff;
+  }
+  .delete-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+  .delete-error {
+    max-width: 180px;
+    overflow: hidden;
+    color: var(--accent-red);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .group-filter-wrap {

@@ -8,7 +8,7 @@
   import GroupDetail from '$lib/components/GroupDetail.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import GroupContextMenu from '$lib/components/GroupContextMenu.svelte';
-  import { sessions, loading, selectedSessionId, selectedGroupKey, selectSession, selectGroup, refreshCounter, togglePin, searchQuery, messageMatchIds } from '$lib/stores/sessions';
+  import { sessions, loading, selectedSessionId, selectedGroupKey, selectedSessions, selectSession, selectGroup, refreshCounter, togglePin, searchQuery, messageMatchIds } from '$lib/stores/sessions';
   import { extractSearchKeywords, parseSearchExpr, resolveExprWithSets } from '$lib/utils/search';
   import { settings } from '$lib/stores/settings';
   import type { SessionSummary } from '$lib/types/session';
@@ -20,6 +20,9 @@
   let deleteConfirm = $state<SessionSummary | null>(null);
   let deleteWorkspaceCount = $state(0);
   let deleteMode = $state<'session' | 'workspace'>('session');
+  let bulkDeleteConfirm = $state(false);
+  let bulkDeleting = $state(false);
+  let bulkDeleteError = $state('');
   let unlisten: (() => void) | null = null;
   let msgSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let unsubSearch: (() => void) | null = null;
@@ -56,7 +59,7 @@
     try {
       // Phase 1: Show cached data instantly (no filesystem walk)
       const cached = await invoke('list_sessions_cached');
-      sessions.set(cached as any[]);
+      replaceSessions(cached as SessionSummary[]);
       if (!isViewing) {
         loading.set(false);
         refreshCounter.update(n => n + 1);
@@ -64,12 +67,20 @@
 
       // Phase 2: Full scan in background, silently update the list
       const fresh = await invoke('list_sessions');
-      sessions.set(fresh as any[]);
+      replaceSessions(fresh as SessionSummary[]);
       if (!isViewing) refreshCounter.update(n => n + 1);
     } catch (e) {
       console.error('Scan failed:', e);
       if (!isViewing) loading.set(false);
     }
+  }
+
+  function replaceSessions(next: SessionSummary[]) {
+    const availableKeys = new Set(next.map(session => session.id + ':' + session.source));
+    sessions.set(next);
+    selectedSessions.update(selected =>
+      new Set([...selected].filter(key => availableKeys.has(key)))
+    );
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
@@ -86,7 +97,38 @@
   import { get } from 'svelte/store';
 
   onMount(async () => {
-    // Apply saved custom paths before first scan (comma-separated, sent as-is to backend)
+    // Apply saved source settings before the first scan.
+    try {
+      await invoke('set_vscode_enabled', { enabled: get(settings).vscodeEnabled });
+    } catch {
+      // Keep the backend default if the setting cannot be applied.
+    }
+
+    const savedVscodePath = get(settings).vscodeWorkspacePath;
+    if (savedVscodePath) {
+      try {
+        await invoke('set_vscode_workspace_path', { path: savedVscodePath });
+      } catch {
+        // Path may no longer exist.
+      }
+    }
+
+    try {
+      await invoke('set_cache_enabled', { enabled: get(settings).cacheEnabled });
+    } catch {
+      // Keep the backend default if the setting cannot be applied.
+    }
+
+    const savedCacheDir = get(settings).cacheDir;
+    if (savedCacheDir) {
+      try {
+        await invoke('set_cache_dir', { path: savedCacheDir });
+      } catch {
+        // Keep the backend default if the cache path cannot be applied.
+      }
+    }
+
+    // Apply saved Copilot CLI paths (comma-separated, sent as-is to backend).
     const savedCliPath = get(settings).copilotCliPath;
     if (savedCliPath) {
       try {
@@ -291,9 +333,19 @@
         });
         // Remove all sessions from this workspace from local state
         const wsHash = deleteConfirm.extra.workspace_hash;
+        const workspaceKeys = new Set(
+          $sessions
+            .filter(s => s.source === 'vscode-copilot' && s.extra?.workspace_hash === wsHash)
+            .map(s => s.id + ':' + s.source)
+        );
         sessions.update(all =>
           all.filter(s => !(s.source === 'vscode-copilot' && s.extra?.workspace_hash === wsHash))
         );
+        selectedSessions.update(selected => {
+          const next = new Set(selected);
+          for (const key of workspaceKeys) next.delete(key);
+          return next;
+        });
         if ($selectedSessionId) {
           const sel = $sessions.find(s => s.id + ':' + s.source === $selectedSessionId);
           if (!sel) selectedSessionId.set(null);
@@ -311,6 +363,11 @@
           sessions.update(all =>
             all.filter(s => !(s.id === deleted.id && s.source === deleted.source))
           );
+          selectedSessions.update(selected => {
+            const next = new Set(selected);
+            next.delete(deleted.id + ':' + deleted.source);
+            return next;
+          });
           if ($selectedSessionId === deleted.id + ':' + deleted.source) {
             selectedSessionId.set(null);
           }
@@ -329,6 +386,100 @@
     deleteConfirm = null;
   }
 
+  function handleBulkDeleteStart() {
+    if ($selectedSessions.size === 0) return;
+    bulkDeleteError = '';
+    bulkDeleteConfirm = true;
+  }
+
+  async function deleteSessionBatch(
+    selected: SessionSummary[],
+    replaceSelection = true
+  ): Promise<Set<string>> {
+    bulkDeleting = true;
+    bulkDeleteError = '';
+    const deletedKeys = new Set<string>();
+    const failedKeys = new Set<string>();
+    const bySource = new Map<string, SessionSummary[]>();
+
+    for (const session of selected) {
+      const sourceSessions = bySource.get(session.source) ?? [];
+      sourceSessions.push(session);
+      bySource.set(session.source, sourceSessions);
+    }
+
+    for (const [source, sourceSessions] of bySource) {
+      try {
+        const errors: string[] = await invoke('delete_sessions', {
+          source,
+          ids: sourceSessions.map(session => session.id),
+        });
+        for (const session of sourceSessions) {
+          const key = session.id + ':' + session.source;
+          if (errors.some(error => error.startsWith(session.id + ':'))) failedKeys.add(key);
+          else deletedKeys.add(key);
+        }
+      } catch (e: any) {
+        for (const session of sourceSessions) {
+          failedKeys.add(session.id + ':' + session.source);
+        }
+        console.error(`Bulk delete failed for ${source}:`, e);
+      }
+    }
+
+    if (deletedKeys.size > 0) {
+      sessions.update(all =>
+        all.filter(session => !deletedKeys.has(session.id + ':' + session.source))
+      );
+      if ($selectedSessionId && deletedKeys.has($selectedSessionId)) {
+        selectedSessionId.set(null);
+      }
+    }
+
+    if (replaceSelection) {
+      selectedSessions.set(failedKeys);
+    } else {
+      selectedSessions.update(current => {
+        const next = new Set(current);
+        for (const key of deletedKeys) next.delete(key);
+        for (const key of failedKeys) next.add(key);
+        return next;
+      });
+    }
+    bulkDeleting = false;
+    return failedKeys;
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const selected = $sessions.filter(session =>
+      $selectedSessions.has(session.id + ':' + session.source)
+    );
+    if (selected.length === 0) {
+      selectedSessions.set(new Set());
+      bulkDeleteConfirm = false;
+      return;
+    }
+
+    const failedKeys = await deleteSessionBatch(selected);
+    if (failedKeys.size === 0) {
+      bulkDeleteConfirm = false;
+    } else {
+      bulkDeleteError = `${failedKeys.size} session(s) could not be deleted.`;
+    }
+  }
+
+  async function handleDeleteEmpty(emptySessions: SessionSummary[]) {
+    if (bulkDeleting || emptySessions.length === 0) return;
+    const failedKeys = await deleteSessionBatch(emptySessions, false);
+    if (failedKeys.size > 0) {
+      bulkDeleteError = `${failedKeys.size} empty session(s) could not be deleted.`;
+    }
+  }
+
+  function handleBulkDeleteCancel() {
+    if (!bulkDeleting) bulkDeleteConfirm = false;
+  }
+
   function handleRenameKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') handleRenameSubmit();
     if (e.key === 'Escape') handleRenameCancel();
@@ -339,7 +490,14 @@
   <Toolbar />
   <div class="content" class:resizing={isResizing}>
     <div class="sidebar" class:collapsed={showDetail} style={showDetail ? `width:${sidebarWidth}px;min-width:${sidebarWidth}px` : ''}>
-      <SessionList oncontextmenu={openContextMenu} ongroupcontextmenu={openGroupContextMenu} />
+      <SessionList
+        oncontextmenu={openContextMenu}
+        ongroupcontextmenu={openGroupContextMenu}
+        onbulkdelete={handleBulkDeleteStart}
+        ondeleteempty={handleDeleteEmpty}
+        bulkdeleting={bulkDeleting}
+        bulkdeleteerror={bulkDeleteError}
+      />
     </div>
     {#if showDetail}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -398,6 +556,28 @@
       <div class="modal-actions">
         <button class="modal-btn cancel" onclick={handleRenameCancel}>Cancel</button>
         <button class="modal-btn confirm" onclick={handleRenameSubmit} disabled={!renameValue.trim()}>Rename</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if bulkDeleteConfirm}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={handleBulkDeleteCancel}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
+      <div class="modal-title">Delete {$selectedSessions.size} Sessions</div>
+      <div class="modal-text">
+        This will permanently delete all selected session data from disk. This action cannot be undone.
+      </div>
+      {#if bulkDeleteError}
+        <div class="delete-error">{bulkDeleteError}</div>
+      {/if}
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick={handleBulkDeleteCancel} disabled={bulkDeleting}>Cancel</button>
+        <button class="modal-btn danger" onclick={handleBulkDeleteConfirm} disabled={bulkDeleting}>
+          {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
+        </button>
       </div>
     </div>
   </div>
@@ -624,6 +804,15 @@
     border-color: var(--accent-red);
   }
   .modal-btn.danger:hover { opacity: 0.9; }
+  .modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .delete-error {
+    margin-bottom: 12px;
+    color: var(--accent-red);
+    font-size: var(--font-size-small);
+  }
 
   .delete-options {
     display: flex;

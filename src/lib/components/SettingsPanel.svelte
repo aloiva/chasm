@@ -18,6 +18,7 @@
   let vscodePath = $state('');
   let vscodePathStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let vscodePathError = $state('');
+  let vscodeEnabled = $state(true);
 
   // Cache state
   let cachePath = $state('');
@@ -50,6 +51,7 @@
     }
     agentvizPath = $settings.agentvizPath || '';
     maxSessions = $settings.agentvizMaxSessions;
+    vscodeEnabled = $settings.vscodeEnabled;
     try {
       const savedVscode = $settings.vscodeWorkspacePath;
       vscodePath = savedVscode || await invoke<string>('get_vscode_workspace_path');
@@ -186,6 +188,18 @@
     } catch (e: any) {
       vscodePathStatus = 'error';
       vscodePathError = typeof e === 'string' ? e : e?.message || 'Failed to set path';
+    }
+  }
+
+  async function toggleVscodeEnabled() {
+    const enabled = !vscodeEnabled;
+    try {
+      await invoke('set_vscode_enabled', { enabled });
+      vscodeEnabled = enabled;
+      updateSetting('vscodeEnabled', enabled);
+      window.dispatchEvent(new CustomEvent('chasm-rescan'));
+    } catch {
+      // Keep the current state if the backend rejects the change.
     }
   }
 
@@ -392,6 +406,11 @@
       <div class="settings-divider"></div>
       <div class="settings-header">VS Code Workspace Storage Path</div>
 
+      <label class="setting-row">
+        <span>Include VS Code Copilot sessions</span>
+        <input type="checkbox" checked={vscodeEnabled} onchange={toggleVscodeEnabled} />
+      </label>
+
       <div class="path-setting">
         <input
           type="text"
@@ -531,6 +550,9 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 8px 0;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: 100;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }

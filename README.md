@@ -30,6 +30,8 @@ Currently, only the Copilot CLI adapter has full functionality (resume, rename, 
 
 **Keyboard shortcut**: `Ctrl+R` rescans all sessions.
 
+Use **Delete Empty** to permanently remove all currently visible sessions with zero turns in one click. For other bulk cleanup, use the session checkboxes: **All** selects every filtered session, **Empty** selects filtered sessions with zero turns, and **Delete** removes the selection after confirmation.
+
 Each feature is described in detail in its own section below: [Search](#search), [Filters](#filters), [Setups](#setups).
 
 ## Right-Click Context Menu
@@ -165,6 +167,8 @@ chasm has two configurable paths in **Settings** for Copilot CLI:
 |---------|---------|-------------|
 | **Copilot CLI Sessions Path** | `~/.copilot/session-state` | Directory containing session folders (workspace.yaml, events.jsonl) |
 | **Session Store DB Path** | `~/.copilot/session-store.db` | SQLite database with sessions, turns, checkpoints, files |
+
+VS Code Copilot session discovery can be disabled in **Settings → Include VS Code Copilot sessions**. Disable it when only Copilot CLI sessions are needed or when a large VS Code workspace-storage directory makes startup slow.
 
 If your sessions are stored elsewhere (e.g. older Copilot CLI versions used `~/.copilot/history-session-state/`), you can configure the paths individually.
 
